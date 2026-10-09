@@ -3,6 +3,7 @@ package checker
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -39,7 +40,7 @@ func NewHTTPChecker(transportTimeout time.Duration) *HTTPChecker {
 	return &HTTPChecker{
 		client: &http.Client{
 			Transport: transport,
-			Timeout:   0, // per-request context handles the timeout
+			Timeout:   0,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				if len(via) >= 10 {
 					return http.ErrUseLastResponse
@@ -143,7 +144,7 @@ func (c *HTTPChecker) Check(ctx context.Context, target *models.Target) (*models
 	}
 
 	transferStart := time.Now()
-	bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 1024*1024)) // limit to 1MB
+	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, 2*1024*1024)) // limit to 2MB
 	transferDuration = time.Since(transferStart)
 	totalDuration := time.Since(startTime)
 
@@ -152,15 +153,26 @@ func (c *HTTPChecker) Check(ctx context.Context, target *models.Target) (*models
 
 	// Validate status code
 	expectedStatus := false
-	for _, code := range target.ExpectedStatusCodes {
-		if resp.StatusCode == code {
-			expectedStatus = true
-			break
+	if len(target.ExpectedStatusCodes) == 0 {
+		expectedStatus = (resp.StatusCode >= 200 && resp.StatusCode < 300)
+	} else {
+		for _, code := range target.ExpectedStatusCodes {
+			if resp.StatusCode == code {
+				expectedStatus = true
+				break
+			}
 		}
 	}
+
 	if !expectedStatus {
 		status = models.StatusDown
-		errMsg = http.StatusText(resp.StatusCode)
+		errMsg = fmt.Sprintf("status code %d not in expected list", resp.StatusCode)
+	} else if target.ExpectedKeyword != "" {
+		bodyStr := string(bodyBytes)
+		if !strings.Contains(bodyStr, target.ExpectedKeyword) {
+			status = models.StatusDown
+			errMsg = fmt.Sprintf("expected keyword '%s' not found in response body", target.ExpectedKeyword)
+		}
 	}
 
 	return &models.CheckResult{
