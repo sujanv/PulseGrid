@@ -20,15 +20,28 @@ type Registry struct {
 }
 
 func NewRegistry() *Registry {
-	return &Registry{
+	r := &Registry{
 		checkers: make(map[models.TargetType]Checker),
 	}
+	r.RegisterDefaultCheckers()
+	return r
 }
 
 func (r *Registry) Register(targetType models.TargetType, c Checker) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.checkers[targetType] = c
+}
+
+func (r *Registry) RegisterDefaultCheckers() {
+	r.Register(models.TargetPing, NewPingChecker())
+	r.Register(models.TargetWebSocket, NewWebSocketChecker())
+	r.Register(models.TargetGRPC, NewGRPCChecker())
+	r.Register(models.TargetTCP, NewTCPChecker())
+	r.Register(models.TargetDNS, NewDNSChecker())
+	r.Register(models.TargetTLS, NewTLSChecker())
+	r.Register(models.TargetHTTP, NewHTTPChecker(10*time.Second))
+	r.Register(models.TargetHTTPS, NewHTTPChecker(10*time.Second))
 }
 
 func (r *Registry) Get(targetType models.TargetType) (Checker, bool) {
