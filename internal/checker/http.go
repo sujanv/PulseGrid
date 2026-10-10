@@ -12,11 +12,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/sujanv/PulseGrid/internal/assertion"
 	"github.com/sujanv/PulseGrid/internal/models"
 )
 
 type HTTPChecker struct {
-	client *http.Client
+	client          *http.Client
+	assertionEngine *assertion.Engine
 }
 
 func NewHTTPChecker(transportTimeout time.Duration) *HTTPChecker {
@@ -48,6 +50,7 @@ func NewHTTPChecker(transportTimeout time.Duration) *HTTPChecker {
 				return nil
 			},
 		},
+		assertionEngine: assertion.NewEngine(),
 	}
 }
 
@@ -112,7 +115,7 @@ func (c *HTTPChecker) Check(ctx context.Context, target *models.Target) (*models
 		return nil, err
 	}
 
-	req.Header.Set("User-Agent", "PulseGrid-Uptime-Monitor/1.0 (+https://github.com/sujanv/PulseGrid)")
+	req.Header.Set("User-Agent", "PulseGrid-Uptime-Monitor/2.0 (+https://github.com/sujanv/PulseGrid)")
 	for k, v := range target.Headers {
 		req.Header.Set(k, v)
 	}
@@ -151,7 +154,7 @@ func (c *HTTPChecker) Check(ctx context.Context, target *models.Target) (*models
 	status := models.StatusUp
 	var errMsg string
 
-	// Validate status code
+	// 1. Status Code Validation
 	expectedStatus := false
 	if len(target.ExpectedStatusCodes) == 0 {
 		expectedStatus = (resp.StatusCode >= 200 && resp.StatusCode < 300)
@@ -168,10 +171,36 @@ func (c *HTTPChecker) Check(ctx context.Context, target *models.Target) (*models
 		status = models.StatusDown
 		errMsg = fmt.Sprintf("status code %d not in expected list", resp.StatusCode)
 	} else if target.ExpectedKeyword != "" {
+		// 2. Keyword Assertion
 		bodyStr := string(bodyBytes)
 		if !strings.Contains(bodyStr, target.ExpectedKeyword) {
 			status = models.StatusDown
 			errMsg = fmt.Sprintf("expected keyword '%s' not found in response body", target.ExpectedKeyword)
+		}
+	}
+
+	// 3. Advanced Assertion Rules (JSONPath, Regex, Header)
+	if status == models.StatusUp && len(target.Assertions) > 0 {
+		var convertedRules []assertion.AssertionRule
+		for _, a := range target.Assertions {
+			convertedRules = append(convertedRules, assertion.AssertionRule{
+				Type:     assertion.RuleType(a.Type),
+				Property: a.Property,
+				Operator: assertion.Operator(a.Operator),
+				Expected: a.Expected,
+			})
+		}
+		if passed, assertionErr := c.assertionEngine.EvaluateAll(bodyBytes, resp.Header, convertedRules); !passed {
+			status = models.StatusDown
+			errMsg = assertionErr
+		}
+	}
+
+	// 4. Latency SLA Evaluation -> Degraded Status
+	if status == models.StatusUp && target.DegradedThresholdMs > 0 {
+		if totalDuration > time.Duration(target.DegradedThresholdMs)*time.Millisecond {
+			status = models.StatusDegraded
+			errMsg = fmt.Sprintf("response latency (%v) breached SLA threshold of %dms", totalDuration, target.DegradedThresholdMs)
 		}
 	}
 
