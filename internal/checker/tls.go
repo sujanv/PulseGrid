@@ -58,7 +58,8 @@ func (c *TLSChecker) Check(ctx context.Context, target *models.Target) (*models.
 	}
 
 	totalLatency := time.Since(startTime)
-	certs := tlsConn.ConnectionState().PeerCertificates
+	state := tlsConn.ConnectionState()
+	certs := state.PeerCertificates
 	if len(certs) == 0 {
 		return &models.CheckResult{
 			ID:           uuid.New().String(),
@@ -77,12 +78,21 @@ func (c *TLSChecker) Check(ctx context.Context, target *models.Target) (*models.
 	status := models.StatusUp
 	var errMsg string
 
+	// Expiration check
 	if now.After(leaf.NotAfter) {
 		status = models.StatusDown
 		errMsg = fmt.Sprintf("certificate expired on %s", leaf.NotAfter.Format(time.RFC3339))
 	} else if daysLeft < 14 {
 		status = models.StatusDegraded
 		errMsg = fmt.Sprintf("certificate expires soon: %d days left (%s)", daysLeft, leaf.NotAfter.Format("2006-01-02"))
+	}
+
+	// Security protocol evaluation: flag weak TLS versions (TLS 1.0 = 0x0301, TLS 1.1 = 0x0302)
+	if status == models.StatusUp {
+		if state.Version < tls.VersionTLS12 {
+			status = models.StatusDegraded
+			errMsg = fmt.Sprintf("insecure TLS version detected: 0x%04x (upgrade to TLS 1.2+ recommended)", state.Version)
+		}
 	}
 
 	return &models.CheckResult{
