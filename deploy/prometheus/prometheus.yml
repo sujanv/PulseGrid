@@ -1,0 +1,9 @@
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+
+scrape_configs:
+  - job_name: "pulsegrid"
+    static_configs:
+      - targets: ["pulsegrid:8080"]
+    metrics_path: "/metrics"
