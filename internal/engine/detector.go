@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/sujanv/PulseGrid/internal/maintenance"
 	"github.com/sujanv/PulseGrid/internal/models"
 	"github.com/sujanv/PulseGrid/internal/storage/postgres"
 )
@@ -22,10 +23,11 @@ type TargetState struct {
 }
 
 type IncidentDetector struct {
-	incidentRepo postgres.IncidentRepository
-	listener     IncidentListener
-	mu           sync.RWMutex
-	states       map[string]*TargetState
+	incidentRepo       postgres.IncidentRepository
+	listener           IncidentListener
+	maintenanceManager *maintenance.Manager
+	mu                 sync.RWMutex
+	states             map[string]*TargetState
 }
 
 func NewIncidentDetector(repo postgres.IncidentRepository, listener IncidentListener) *IncidentDetector {
@@ -36,9 +38,22 @@ func NewIncidentDetector(repo postgres.IncidentRepository, listener IncidentList
 	}
 }
 
+func (d *IncidentDetector) SetMaintenanceManager(m *maintenance.Manager) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.maintenanceManager = m
+}
+
 func (d *IncidentDetector) ProcessResult(ctx context.Context, target *models.Target, res *models.CheckResult) (*models.Incident, *models.AlertEvent) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+
+	// Check if target is currently under scheduled maintenance
+	if d.maintenanceManager != nil && d.maintenanceManager.IsUnderMaintenance(target.ID, res.Timestamp) {
+		res.Status = models.StatusDegraded
+		res.ErrorMessage = "[Maintenance Window Active] Alerts and downtime suppressed"
+		return nil, nil
+	}
 
 	state, ok := d.states[target.ID]
 	if !ok {
@@ -56,7 +71,6 @@ func (d *IncidentDetector) ProcessResult(ctx context.Context, target *models.Tar
 		state.ConsecutiveFailures++
 		state.ConsecutiveSuccess = 0
 
-		// Check if threshold breached and no active incident
 		if state.ConsecutiveFailures >= target.FailureThreshold && state.CurrentIncident == nil {
 			state.Status = models.StatusDown
 			rootCause := res.ErrorMessage
@@ -95,7 +109,6 @@ func (d *IncidentDetector) ProcessResult(ctx context.Context, target *models.Tar
 			}
 		}
 	} else {
-		// Result is UP
 		state.ConsecutiveSuccess++
 		state.ConsecutiveFailures = 0
 
