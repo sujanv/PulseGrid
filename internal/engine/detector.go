@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/sujanv/PulseGrid/internal/consensus"
 	"github.com/sujanv/PulseGrid/internal/maintenance"
 	"github.com/sujanv/PulseGrid/internal/models"
 	"github.com/sujanv/PulseGrid/internal/storage/postgres"
@@ -26,6 +27,7 @@ type IncidentDetector struct {
 	incidentRepo       postgres.IncidentRepository
 	listener           IncidentListener
 	maintenanceManager *maintenance.Manager
+	consensusEngine    *consensus.QuorumConsensus
 	mu                 sync.RWMutex
 	states             map[string]*TargetState
 }
@@ -44,15 +46,26 @@ func (d *IncidentDetector) SetMaintenanceManager(m *maintenance.Manager) {
 	d.maintenanceManager = m
 }
 
+func (d *IncidentDetector) SetConsensusEngine(c *consensus.QuorumConsensus) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.consensusEngine = c
+}
+
 func (d *IncidentDetector) ProcessResult(ctx context.Context, target *models.Target, res *models.CheckResult) (*models.Incident, *models.AlertEvent) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	// Check if target is currently under scheduled maintenance
+	// 1. Maintenance Window Check
 	if d.maintenanceManager != nil && d.maintenanceManager.IsUnderMaintenance(target.ID, res.Timestamp) {
 		res.Status = models.StatusDegraded
 		res.ErrorMessage = "[Maintenance Window Active] Alerts and downtime suppressed"
 		return nil, nil
+	}
+
+	// 2. Multi-region Consensus Check
+	if d.consensusEngine != nil {
+		d.consensusEngine.Record(target.ID, "primary", res.Status)
 	}
 
 	state, ok := d.states[target.ID]
@@ -71,41 +84,45 @@ func (d *IncidentDetector) ProcessResult(ctx context.Context, target *models.Tar
 		state.ConsecutiveFailures++
 		state.ConsecutiveSuccess = 0
 
+		// Check if threshold breached and no active incident
 		if state.ConsecutiveFailures >= target.FailureThreshold && state.CurrentIncident == nil {
-			state.Status = models.StatusDown
-			rootCause := res.ErrorMessage
-			if rootCause == "" && res.StatusCode != 0 {
-				rootCause = fmt.Sprintf("HTTP %d response", res.StatusCode)
-			}
+			// If consensus engine is enabled, verify quorum before opening incident
+			if d.consensusEngine == nil || d.consensusEngine.IsOutageConfirmed(target.ID) {
+				state.Status = models.StatusDown
+				rootCause := res.ErrorMessage
+				if rootCause == "" && res.StatusCode != 0 {
+					rootCause = fmt.Sprintf("HTTP %d response", res.StatusCode)
+				}
 
-			inc := &models.Incident{
-				ID:                  uuid.New().String(),
-				TargetID:            target.ID,
-				TargetName:          target.Name,
-				StartedAt:           res.Timestamp,
-				Status:              models.IncidentOpen,
-				RootCause:           rootCause,
-				ConsecutiveFailures: state.ConsecutiveFailures,
-				Severity:            models.SeverityCritical,
-			}
-			state.CurrentIncident = inc
-			generatedIncident = inc
+				inc := &models.Incident{
+					ID:                  uuid.New().String(),
+					TargetID:            target.ID,
+					TargetName:          target.Name,
+					StartedAt:           res.Timestamp,
+					Status:              models.IncidentOpen,
+					RootCause:           rootCause,
+					ConsecutiveFailures: state.ConsecutiveFailures,
+					Severity:            models.SeverityCritical,
+				}
+				state.CurrentIncident = inc
+				generatedIncident = inc
 
-			if d.incidentRepo != nil {
-				_ = d.incidentRepo.CreateIncident(ctx, inc)
-			}
+				if d.incidentRepo != nil {
+					_ = d.incidentRepo.CreateIncident(ctx, inc)
+				}
 
-			alert = &models.AlertEvent{
-				ID:         uuid.New().String(),
-				IncidentID: inc.ID,
-				TargetID:   target.ID,
-				TargetName: target.Name,
-				TargetURL:  target.URL,
-				EventType:  models.AlertOutage,
-				Message:    fmt.Sprintf("Target %s is DOWN: %s", target.Name, rootCause),
-				LatencyMs:  float64(res.Latency.Milliseconds()),
-				StatusCode: res.StatusCode,
-				Timestamp:  res.Timestamp,
+				alert = &models.AlertEvent{
+					ID:         uuid.New().String(),
+					IncidentID: inc.ID,
+					TargetID:   target.ID,
+					TargetName: target.Name,
+					TargetURL:  target.URL,
+					EventType:  models.AlertOutage,
+					Message:    fmt.Sprintf("Target %s is DOWN: %s", target.Name, rootCause),
+					LatencyMs:  float64(res.Latency.Milliseconds()),
+					StatusCode: res.StatusCode,
+					Timestamp:  res.Timestamp,
+				}
 			}
 		}
 	} else {
