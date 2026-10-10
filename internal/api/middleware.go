@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,12 +29,11 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 		}
 		r.Header.Set("X-Request-ID", reqID)
 
-		interceptor := &responseWriterInterceptor{ResponseWriter: *w, statusCode: http.StatusOK}
-		*w = interceptor
+		interceptor := &responseWriterInterceptor{ResponseWriter: w, statusCode: http.StatusOK}
 
 		interceptor.Header().Set("X-Request-ID", reqID)
 
-		next.ServeHTTP(*w, r)
+		next.ServeHTTP(interceptor, r)
 
 		log.Printf("[HTTP] %s %s | %d | %v | req_id=%s",
 			r.Method, r.URL.Path, interceptor.statusCode, time.Since(start), reqID)
@@ -41,28 +41,61 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 }
 
 func RecoveryMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w *http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rec := recover(); rec != nil {
 				log.Printf("[PANIC RECOVERED] %v\n%s", rec, debug.Stack())
-				ErrorResponse(*w, http.StatusInternalServerError, "internal server error")
+				ErrorResponse(w, http.StatusInternalServerError, "internal server error")
 			}
 		}()
-		next.ServeHTTP(*w, r)
+		next.ServeHTTP(w, r)
 	})
 }
 
 func CORSMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w *http.ResponseWriter, r *http.Request) {
-		(*w).Header().Set("Access-Control-Allow-Origin", "*")
-		(*w).Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		(*w).Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key, X-Request-ID")
 
 		if r.Method == http.MethodOptions {
-			(*w).WriteHeader(http.StatusOK)
+			w.WriteHeader(http.StatusOK)
 			return
 		}
 
-		next.ServeHTTP(*w, r)
+		next.ServeHTTP(w, r)
 	})
+}
+
+func RequireAuth(auth *AuthManager, requiredRole Role, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if auth == nil {
+			next(w, r)
+			return
+		}
+
+		// Allow public endpoints
+		if strings.HasPrefix(r.URL.Path, "/metrics") ||
+		   strings.HasPrefix(r.URL.Path, "/healthz") ||
+		   strings.HasPrefix(r.URL.Path, "/readyz") ||
+		   strings.HasPrefix(r.URL.Path, "/badge") ||
+		   strings.HasPrefix(r.URL.Path, "/status") ||
+		   r.URL.Path == "/" || r.URL.Path == "/dashboard" {
+			next(w, r)
+			return
+		}
+
+		role, ok := auth.Authenticate(r)
+		if !ok {
+			ErrorResponse(w, http.StatusUnauthorized, "unauthorized: valid API key required")
+			return
+		}
+
+		if requiredRole == RoleAdmin && role != RoleAdmin {
+			ErrorResponse(w, http.StatusForbidden, "forbidden: admin role required")
+			return
+		}
+
+		next(w, r)
+	}
 }
