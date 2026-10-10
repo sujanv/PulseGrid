@@ -9,11 +9,14 @@ import (
 type TargetType string
 
 const (
-	TargetHTTP  TargetType = "HTTP"
-	TargetHTTPS TargetType = "HTTPS"
-	TargetTCP   TargetType = "TCP"
-	TargetDNS   TargetType = "DNS"
-	TargetTLS   TargetType = "TLS"
+	TargetHTTP      TargetType = "HTTP"
+	TargetHTTPS     TargetType = "HTTPS"
+	TargetTCP       TargetType = "TCP"
+	TargetDNS       TargetType = "DNS"
+	TargetTLS       TargetType = "TLS"
+	TargetPing      TargetType = "PING"
+	TargetWebSocket TargetType = "WEBSOCKET"
+	TargetGRPC      TargetType = "GRPC"
 )
 
 type HTTPMethod string
@@ -25,6 +28,13 @@ const (
 	MethodPUT  HTTPMethod = "PUT"
 )
 
+type AssertionRule struct {
+	Type     string `json:"type"`     // JSONPATH, REGEX, HEADER
+	Property string `json:"property"` // Path, Header name, etc.
+	Operator string `json:"operator"` // equals, contains, greater_than, less_than
+	Expected string `json:"expected"`
+}
+
 type Target struct {
 	ID                  string            `json:"id"`
 	Name                string            `json:"name"`
@@ -34,11 +44,13 @@ type Target struct {
 	Type                TargetType        `json:"type"`
 	Interval            time.Duration     `json:"interval"`
 	Timeout             time.Duration     `json:"timeout"`
+	DegradedThresholdMs int               `json:"degraded_threshold_ms,omitempty"` // Latency SLA threshold
 	Method              HTTPMethod        `json:"method,omitempty"`
 	Headers             map[string]string `json:"headers,omitempty"`
 	Body                string            `json:"body,omitempty"`
 	ExpectedStatusCodes []int             `json:"expected_status_codes,omitempty"`
 	ExpectedKeyword     string            `json:"expected_keyword,omitempty"`
+	Assertions          []AssertionRule   `json:"assertions,omitempty"`
 	FailureThreshold    int               `json:"failure_threshold"`
 	SuccessThreshold    int               `json:"success_threshold"`
 	Active              bool              `json:"active"`
@@ -72,21 +84,27 @@ func (t *Target) Validate() error {
 	}
 
 	switch t.Type {
-	case TargetHTTP, TargetHTTPS:
+	case TargetHTTP, TargetHTTPS, TargetWebSocket:
 		u, err := url.ParseRequestURI(t.URL)
 		if err != nil {
 			return errors.New("invalid target URL")
 		}
-		if u.Scheme != "http" && u.Scheme != "https" {
-			return errors.New("URL scheme must be http or https")
+		if t.Type == TargetWebSocket {
+			if u.Scheme != "ws" && u.Scheme != "wss" && u.Scheme != "http" && u.Scheme != "https" {
+				return errors.New("WebSocket scheme must be ws, wss, http, or https")
+			}
+		} else {
+			if u.Scheme != "http" && u.Scheme != "https" {
+				return errors.New("URL scheme must be http or https")
+			}
 		}
-		if len(t.ExpectedStatusCodes) == 0 {
+		if len(t.ExpectedStatusCodes) == 0 && t.Type != TargetWebSocket {
 			t.ExpectedStatusCodes = []int{200, 201, 204}
 		}
 		if t.Method == "" {
 			t.Method = MethodGET
 		}
-	case TargetTCP, TargetTLS:
+	case TargetTCP, TargetTLS, TargetPing, TargetGRPC:
 		if t.Host == "" && t.URL != "" {
 			u, err := url.Parse(t.URL)
 			if err == nil && u.Hostname() != "" {
@@ -94,12 +112,14 @@ func (t *Target) Validate() error {
 			}
 		}
 		if t.Host == "" {
-			return errors.New("target host is required for TCP/TLS")
+			return errors.New("target host is required")
 		}
 		if t.Port <= 0 || t.Port > 65535 {
 			if t.Type == TargetTLS {
 				t.Port = 443
-			} else {
+			} else if t.Type == TargetGRPC {
+				t.Port = 50051
+			} else if t.Type == TargetTCP {
 				return errors.New("valid port (1-65535) is required for TCP")
 			}
 		}
