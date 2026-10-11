@@ -87,6 +87,14 @@ var (
 		},
 		[]string{"channel_type", "event_type"},
 	)
+
+	LatencyAnomaliesTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "pulsegrid_latency_anomalies_total",
+			Help: "Total count of statistical latency spikes detected",
+		},
+		[]string{"target_id"},
+	)
 )
 
 func RecordResult(target *models.Target, res *models.CheckResult) {
