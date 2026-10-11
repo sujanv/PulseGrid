@@ -15,7 +15,9 @@ import (
 	"github.com/sujanv/PulseGrid/internal/api"
 	"github.com/sujanv/PulseGrid/internal/checker"
 	"github.com/sujanv/PulseGrid/internal/config"
+	"github.com/sujanv/PulseGrid/internal/consensus"
 	"github.com/sujanv/PulseGrid/internal/engine"
+	"github.com/sujanv/PulseGrid/internal/maintenance"
 	"github.com/sujanv/PulseGrid/internal/metrics"
 	"github.com/sujanv/PulseGrid/internal/models"
 	"github.com/sujanv/PulseGrid/internal/pool"
@@ -45,6 +47,10 @@ func main() {
 		resultRepo = postgres.NewResultRepository(db)
 		incidentRepo = postgres.NewIncidentRepository(db)
 		log.Println("[Storage] Connected to PostgreSQL and applied migrations.")
+
+		// Start background rollup and pruning worker (every 1 hour)
+		rollupWorker := postgres.NewRollupWorker(db, 30)
+		rollupWorker.Start(context.Background(), 1*time.Hour)
 	}
 
 	var redisClient *redis.Client
@@ -58,20 +64,19 @@ func main() {
 		log.Println("[Storage] Connected to Redis.")
 	}
 
-	// 2. Health Checker Registry
+	// 2. Health Checker Registry with all protocols
 	registry := checker.NewRegistry()
-	registry.Register(models.TargetHTTP, checker.NewHTTPChecker(cfg.Pool.DefaultTimeout))
-	registry.Register(models.TargetHTTPS, checker.NewHTTPChecker(cfg.Pool.DefaultTimeout))
-	registry.Register(models.TargetTCP, checker.NewTCPChecker())
-	registry.Register(models.TargetDNS, checker.NewDNSChecker())
-	registry.Register(models.TargetTLS, checker.NewTLSChecker())
 
 	// 3. Concurrency Worker Pool & Rate Limiter
 	workerPool := pool.NewWorkerPool(cfg.Pool.WorkerCount, cfg.Pool.QueueSize)
 	rateLimiter := pool.NewPerHostRateLimiter(cfg.Pool.PerHostRateLimit)
 	log.Printf("[WorkerPool] Initialized with %d workers, queue capacity %d.", cfg.Pool.WorkerCount, cfg.Pool.QueueSize)
 
-	// 4. Alerting Subsystem
+	// 4. Maintenance & Consensus engines
+	maintManager := maintenance.NewManager()
+	quorumConsensus := consensus.NewQuorumConsensus(60*time.Second, 0.60)
+
+	// 5. Alerting Subsystem
 	alertDispatcher := alert.NewDispatcher(5, 500, cfg.Alert.MaxRetries)
 	if cfg.Alert.SMTPHost != "" {
 		alertDispatcher.RegisterChannel(alert.NewEmailChannel(
@@ -80,13 +85,15 @@ func main() {
 		))
 	}
 
-	// 5. Incident Detection Engine
+	// 6. Incident Detection Engine
 	detector := engine.NewIncidentDetector(incidentRepo, func(event *models.AlertEvent) {
 		log.Printf("[Alert] %s: %s", event.EventType, event.Message)
 		alertDispatcher.Dispatch(event)
 	})
+	detector.SetMaintenanceManager(maintManager)
+	detector.SetConsensusEngine(quorumConsensus)
 
-	// 6. Scheduler Engine with Jitter
+	// 7. Scheduler Engine with Jitter
 	sched := scheduler.NewScheduler(
 		workerPool,
 		registry,
@@ -103,7 +110,7 @@ func main() {
 		},
 	)
 
-	// 7. Load targets if repo available
+	// Load targets if repo available
 	if targetRepo != nil {
 		targets, err := targetRepo.ListActive(context.Background())
 		if err == nil {
@@ -120,9 +127,19 @@ func main() {
 	router.HandleFunc("/dashboard", web.Handler())
 	router.Handle("/metrics", promhttp.Handler())
 
+	statusPage := web.NewStatusPageHandler(targetRepo, resultRepo, incidentRepo)
+	router.HandleFunc("/status", statusPage.ServeHTTP)
+
+	badgeHandler := web.NewBadgeHandler(resultRepo)
+	router.HandleFunc("/badge/", badgeHandler.ServeBadge)
+
 	healthHandler := api.NewHealthHandler(db, redisClient, workerPool)
 	router.HandleFunc("/healthz", healthHandler.Healthz)
 	router.HandleFunc("/readyz", healthHandler.Readyz)
+
+	maintHandler := api.NewMaintenanceHandler(maintManager)
+	router.HandleFunc("/api/v1/maintenance", maintHandler.HandleWindows)
+	router.HandleFunc("/api/v1/maintenance/", maintHandler.HandleWindows)
 
 	if targetRepo != nil {
 		targetHandler := api.NewTargetHandler(targetRepo)
@@ -133,12 +150,16 @@ func main() {
 	if resultRepo != nil {
 		resultHandler := api.NewResultHandler(resultRepo)
 		router.HandleFunc("/api/v1/targets/", func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path[len(r.URL.Path)-8:] == "/results" {
+			if len(r.URL.Path) > 8 && r.URL.Path[len(r.URL.Path)-8:] == "/results" {
 				resultHandler.HandleResults(w, r)
-			} else if r.URL.Path[len(r.URL.Path)-6:] == "/stats" {
+			} else if len(r.URL.Path) > 6 && r.URL.Path[len(r.URL.Path)-6:] == "/stats" {
 				resultHandler.HandleStats(w, r)
 			}
 		})
+
+		reportHandler := api.NewReportHandler(targetRepo, resultRepo)
+		router.HandleFunc("/api/v1/reports/sla", reportHandler.HandleSLAReport)
+		router.HandleFunc("/api/v1/reports/export.csv", reportHandler.HandleCSVExport)
 	}
 
 	if incidentRepo != nil {
@@ -148,9 +169,9 @@ func main() {
 	}
 
 	var handler http.Handler = router
-	handler = api.CORSMiddleware(&handler)
-	handler = api.RecoveryMiddleware(&handler)
-	handler = api.LoggingMiddleware(&handler)
+	handler = api.CORSMiddleware(handler)
+	handler = api.RecoveryMiddleware(handler)
+	handler = api.LoggingMiddleware(handler)
 
 	server := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
