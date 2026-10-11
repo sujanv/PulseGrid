@@ -29,6 +29,10 @@ func main() {
 		runCheck(os.Args[2])
 	case "seed":
 		runSeed()
+	case "tui":
+		runTUI()
+	case "export":
+		runExport()
 	default:
 		printUsage()
 	}
@@ -39,6 +43,8 @@ func printUsage() {
 	fmt.Println("Usage:")
 	fmt.Println("  pulsegrid-cli check <url>   - Perform one-off check with latency breakdown")
 	fmt.Println("  pulsegrid-cli seed          - Populate PostgreSQL with sample targets")
+	fmt.Println("  pulsegrid-cli tui           - Launch live terminal monitoring dashboard")
+	fmt.Println("  pulsegrid-cli export        - Export SLA metrics to terminal")
 }
 
 func runCheck(targetURL string) {
@@ -99,7 +105,7 @@ func runSeed() {
 			ExpectedStatusCodes: []int{200}, FailureThreshold: 3, SuccessThreshold: 2, Active: true, CreatedAt: time.Now(), UpdatedAt: time.Now(),
 		},
 		{
-			ID: uuid.New().String(), Name: "GitHub API Status", URL: "https://api.github.com/zen",
+			ID: uuid.New().String(), Name: "GitHub API Zen", URL: "https://api.github.com/zen",
 			Type: models.TargetHTTPS, Interval: 30 * time.Second, Timeout: 10 * time.Second,
 			ExpectedStatusCodes: []int{200}, FailureThreshold: 3, SuccessThreshold: 2, Active: true, CreatedAt: time.Now(), UpdatedAt: time.Now(),
 		},
@@ -118,4 +124,30 @@ func runSeed() {
 		}
 	}
 	fmt.Println("🎉 Database seeded successfully!")
+}
+
+func runExport() {
+	cfg := config.Load()
+	db, err := postgres.Connect(cfg.Database)
+	if err != nil {
+		fmt.Printf("Database connection failed: %v\n", err)
+		return
+	}
+	defer db.Close()
+
+	targetRepo := postgres.NewTargetRepository(db)
+	resultRepo := postgres.NewResultRepository(db)
+	ctx := context.Background()
+
+	targets, _ := targetRepo.ListAll(ctx)
+	fmt.Println("Target,Uptime_30d,Avg_Latency_ms")
+	for _, t := range targets {
+		uptime, _ := resultRepo.CalculateUptime(ctx, t.ID, 30*24*time.Hour)
+		stats, _ := resultRepo.GetLatencyStats(ctx, t.ID, 30*24*time.Hour)
+		lat := 0.0
+		if stats != nil {
+			lat = stats.AvgMs
+		}
+		fmt.Printf("%s,%.2f%%,%.2fms\n", t.Name, uptime, lat)
+	}
 }
