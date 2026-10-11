@@ -17,6 +17,7 @@ const (
 	TargetPing      TargetType = "PING"
 	TargetWebSocket TargetType = "WEBSOCKET"
 	TargetGRPC      TargetType = "GRPC"
+	TargetSynthetic TargetType = "SYNTHETIC"
 )
 
 type HTTPMethod string
@@ -44,13 +45,14 @@ type Target struct {
 	Type                TargetType        `json:"type"`
 	Interval            time.Duration     `json:"interval"`
 	Timeout             time.Duration     `json:"timeout"`
-	DegradedThresholdMs int               `json:"degraded_threshold_ms,omitempty"` // Latency SLA threshold
+	DegradedThresholdMs int               `json:"degraded_threshold_ms,omitempty"`
 	Method              HTTPMethod        `json:"method,omitempty"`
 	Headers             map[string]string `json:"headers,omitempty"`
 	Body                string            `json:"body,omitempty"`
 	ExpectedStatusCodes []int             `json:"expected_status_codes,omitempty"`
 	ExpectedKeyword     string            `json:"expected_keyword,omitempty"`
 	Assertions          []AssertionRule   `json:"assertions,omitempty"`
+	WorkflowJSON        string            `json:"workflow_json,omitempty"`
 	FailureThreshold    int               `json:"failure_threshold"`
 	SuccessThreshold    int               `json:"success_threshold"`
 	Active              bool              `json:"active"`
@@ -132,6 +134,10 @@ func (t *Target) Validate() error {
 		}
 		if t.Host == "" {
 			return errors.New("target domain/host is required for DNS check")
+		}
+	case TargetSynthetic:
+		if t.WorkflowJSON == "" {
+			return errors.New("workflow configuration JSON is required for synthetic target")
 		}
 	default:
 		t.Type = TargetHTTP
