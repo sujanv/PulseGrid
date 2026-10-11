@@ -1,0 +1,64 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": 1,
+  "links": [],
+  "liveNow": true,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "id": 1,
+      "title": "Active Worker Goroutines",
+      "type": "stat",
+      "targets": [{ "expr": "pulsegrid_active_workers", "refId": "A" }]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "id": 2,
+      "title": "Queued Check Jobs",
+      "type": "stat",
+      "targets": [{ "expr": "pulsegrid_queued_jobs", "refId": "A" }]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "id": 3,
+      "title": "Active Downtime Incidents",
+      "type": "stat",
+      "targets": [{ "expr": "pulsegrid_active_incidents", "refId": "A" }]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "id": 4,
+      "title": "Check Rate (req/sec)",
+      "type": "stat",
+      "targets": [{ "expr": "sum(rate(pulsegrid_checks_total[1m]))", "refId": "A" }]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "id": 5,
+      "title": "P95 Latency by Target",
+      "type": "timeseries",
+      "targets": [{ "expr": "histogram_quantile(0.95, sum(rate(pulsegrid_check_duration_seconds_bucket[5m])) by (le, target_id))", "refId": "A" }]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "id": 6,
+      "title": "Target Operational Status (1=UP, 0=DOWN)",
+      "type": "timeseries",
+      "targets": [{ "expr": "pulsegrid_target_up", "refId": "A" }]
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "title": "PulseGrid System Overview",
+  "uid": "pulsegrid-overview",
+  "version": 1
+}
