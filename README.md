@@ -1,42 +1,43 @@
 # PulseGrid ⚡
 
-**PulseGrid** is an enterprise-grade, bounded-concurrency uptime and latency monitoring engine written in Go. Designed to reliably schedule and execute thousands of checks across multiple protocols (HTTP/S, TCP, DNS, TLS, ICMP Ping, WebSocket, gRPC) while strictly bounding memory and goroutine concurrency.
+**PulseGrid** is an enterprise-grade, bounded-concurrency uptime and synthetic monitoring platform written in Go. Designed to schedule, execute, and analyze thousands of checks across multiple protocols (HTTP/S, TCP, UDP, DNS, TLS, ICMP Ping, WebSocket, gRPC, and Multi-Step Synthetics) while strictly bounding memory and goroutine footprints.
 
 ---
 
-## 🌟 Key Features & Capabilities
+## 🌟 Advanced Features & Capabilities
 
-- **Bounded-Concurrency Worker Pool**: Fixed-size goroutine pool backed by a buffered queue to monitor thousands of endpoints without runaway concurrency or memory leaks.
-- **Microsecond Phase Latency Breakdown**: Uses `net/http/httptrace` to record DNS lookup, TCP handshake, TLS negotiation, and Time-to-First-Byte (TTFB).
-- **JSONPath & Regex Assertion Engine**: Validate complex JSON API responses (`$.data.status == "healthy"`), HTTP response headers, and body regex patterns.
-- **Latency SLA Breach Degradation**: Automatic transition to `DEGRADED` status when response times exceed defined SLA thresholds.
-- **Multi-Protocol Health Checkers**:
-  - **HTTP/HTTPS**: Status assertion, custom headers, payload assertions, keyword matching, W3C TraceContext propagation.
-  - **TCP**: Socket connect timeout, banner retrieval.
-  - **DNS**: Recursive resolution duration and IP record matching.
-  - **TLS/SSL**: Expiration alerts, cipher suite security, and weak protocol detection (TLS 1.0/1.1 warnings).
-  - **ICMP Ping**: Packet loss percentage and min/avg/max round-trip latency.
-  - **WebSocket**: RFC 6455 handshake verification and frame round-trip timing.
-  - **gRPC**: Native `grpc.health.v1.Health` protocol health probing.
-- **Incident State Machine & Anti-Flapping**: Debounced consecutive failure/recovery thresholds and sliding-window flap damping to prevent alert storms.
-- **Maintenance Windows & Silence Rules**: Schedule recurring or one-off maintenance windows to silence alerts and pause SLA tracking.
-- **Multi-Region Quorum Consensus**: Eliminates false positives by requiring majority consensus (e.g., 2 of 3 regions) before triggering downtime alerts.
-- **Multi-Channel Alert Dispatcher**:
-  - Generic Webhook (HMAC-SHA256 signature verification).
-  - Slack Block Kit formatted message cards.
-  - Discord rich embed cards.
-  - PagerDuty Events API v2 with automatic incident deduplication and resolution.
-  - Telegram Bot API with markdown alerts.
+- **Bounded-Concurrency Worker Pool**: High-performance goroutine pool with dynamic resizing and backpressure rejection handling.
+- **Microsecond Phase Latency Breakdown**: Powered by `net/http/httptrace` to record DNS lookup, TCP connect, TLS handshake, and Time-to-First-Byte (TTFB).
+- **Multi-Step Synthetic User Journeys**: Execute multi-request workflows (e.g. login -> token extraction -> authenticated API call) with dynamic variable interpolation (`{{authToken}}`).
+- **Statistical Anomaly Detection**: Real-time sliding-window Welford algorithm detecting latency spikes ($Z > 3.0$) and diurnal baselines before total outages occur.
+- **Intelligent Alert Escalation & Quiet Hours**:
+  - Multi-tier delayed escalation policies (Tier 1 immediate -> Tier 2 after 10m -> Tier 3 after 30m).
+  - Timezone-aware quiet hours suppression that prevents non-critical notifications from waking on-call engineers.
+  - Alert grouping to bundle cascading multi-service outages into unified summaries.
+- **Enterprise Alert Integrations**:
+  - PagerDuty Events API v2 (auto-deduplication and resolution).
+  - Atlassian OpsGenie with priority tagging (P1-P5).
+  - Twilio SMS with automated truncation.
+  - Telegram Bot API with markdown alert notifications.
   - Microsoft Teams / Office 365 Adaptive Cards.
-  - SMTP Email delivery with HTML incident summaries.
-- **Public Status Page & SVG Badges**: Clean public-facing status page at `/status` and dynamic SVG uptime badges for READMEs (`/badge/{id}.svg`).
-- **Interactive Terminal TUI**: Live-updating terminal dashboard with real-time status and latency sparklines (`pulsegrid-cli tui`).
-- **Data Rollup & Pruning Worker**: Automated background worker that aggregates hourly checks into daily rollups and prunes historical data.
-- **Production Observability**: Full Prometheus metrics (`/metrics`) and auto-provisioned Grafana dashboards.
+  - Slack Block Kit and Discord rich embeds.
+  - SMTP Email delivery with responsive HTML templates.
+- **Multi-Region Quorum Consensus**: Geo-distributed synthetic agents requiring majority consensus (e.g., 2 of 3 regions) to eliminate false positives.
+- **Security & DNSSEC Posture Auditing**:
+  - HTTP security header analyzer with automated scoring (A+ through F) covering HSTS, CSP, X-Frame-Options, and Permissions-Policy.
+  - DNSSEC validation and SSL/TLS revocation check via OCSP Stapling.
+- **Maintenance Windows & Silence Rules**: Target-specific or global maintenance windows with scheduled suppression of alerts and SLA pauses.
+- **Automated Data Rollups & Retention Pruning**: Background hourly worker aggregates check results into daily summaries and prunes raw time-series records.
+- **Observability & Visualizations**:
+  - Dynamic Shields.io-compatible SVG uptime badges (`/badge/{id}.svg`).
+  - Public status page (`/status`).
+  - Terminal TUI Mode (`pulsegrid-cli tui`).
+  - Global latency heatmap (`/heatmap`).
+  - Native Prometheus metrics (`/metrics`) and pre-configured Grafana dashboards.
 
 ---
 
-## 🏗 System Architecture
+## 🏗 High-Level Architecture
 
 ```
                     ┌───────────────────────────────────┐
@@ -65,19 +66,19 @@
                                       │
                                       ▼
            ┌─────────────────────────────────────────────────────┐
-           │     Assertion Engine (JSONPath, Regex, SLA)         │
+           │     Assertion & Synthetic Transaction Engine        │
            └──────────────────────────┬──────────────────────────┘
                                       │
                                       ▼
            ┌─────────────────────────────────────────────────────┐
-           │        Incident Detector & Flap Dampener            │
-           │  (Maintenance Windows & Multi-Region Quorum)        │
+           │        Incident Detector & Anomaly Engine           │
+           │  (Welford Z-Score, Maintenance, Quorum Consensus)   │
            └──────────────────────────┬──────────────────────────┘
                                       │
                                       ▼
            ┌─────────────────────────────────────────────────────┐
-           │        Async Alert Dispatcher (Worker Pool)         │
-           │  (Slack / Discord / PagerDuty / Telegram / Teams)   │
+           │   Escalation Router & Multi-Channel Alert Queue     │
+           │ (PagerDuty / OpsGenie / Slack / Teams / SMS / Mail) │
            └─────────────────────────────────────────────────────┘
 ```
 
@@ -85,7 +86,7 @@
 
 ## 🚀 Quickstart
 
-### Running with Docker Compose (PulseGrid + PostgreSQL + Redis + Prometheus + Grafana)
+### Running the Full Stack (PulseGrid + PostgreSQL + Redis + Prometheus + Grafana)
 
 ```bash
 docker-compose -f deploy/docker-compose.yml up -d --build
@@ -94,29 +95,30 @@ docker-compose -f deploy/docker-compose.yml up -d --build
 Access services:
 - **Admin Dashboard**: [http://localhost:8080](http://localhost:8080)
 - **Public Status Page**: [http://localhost:8080/status](http://localhost:8080/status)
+- **Regional Latency Heatmap**: [http://localhost:8080/heatmap](http://localhost:8080/heatmap)
 - **Prometheus Metrics**: [http://localhost:8080/metrics](http://localhost:8080/metrics)
 - **Grafana Dashboard**: [http://localhost:3000](http://localhost:3000) (User: `admin` / Password: `admin`)
 - **Health Probes**: [http://localhost:8080/healthz](http://localhost:8080/healthz) and `/readyz`
 
-### Local Development
+### Local Development & CLI
 
 ```bash
-# Build server and CLI
+# Build binaries
 make build
-
-# Run server
-make run
-
-# Seed sample monitors
-./bin/pulsegrid-cli seed
 
 # Launch Terminal TUI Mode
 ./bin/pulsegrid-cli tui
 
-# Probe endpoint with latency breakdown
+# Probe endpoint with full latency phase breakdown
 ./bin/pulsegrid-cli check https://github.com
 
-# Export SLA report to CSV
+# Audit HTTP security headers & calculate posture grade
+./bin/pulsegrid-cli audit https://github.com
+
+# Seed sample monitors
+./bin/pulsegrid-cli seed
+
+# Export 30-day SLA performance report
 ./bin/pulsegrid-cli export
 ```
 
@@ -133,6 +135,12 @@ make run
 | `DELETE` | `/api/v1/targets/:id` | Remove target |
 | `GET` | `/api/v1/targets/:id/results` | Historical check results |
 | `GET` | `/api/v1/targets/:id/stats` | Latency percentiles (P50, P95, P99) & Uptime % |
+| `GET` | `/api/v1/targets/:id/anomalies` | Latency spike anomaly history |
+| `POST` | `/api/v1/synthetics` | Create multi-step synthetic transaction |
+| `POST` | `/api/v1/synthetics/run` | Execute on-demand test of synthetic workflow |
+| `GET` | `/api/v1/agents` | List registered synthetic edge agents |
+| `POST` | `/api/v1/agents/register` | Register new remote edge agent |
+| `POST` | `/api/v1/agents/heartbeat` | Edge agent heartbeat |
 | `GET` | `/api/v1/incidents` | Incident history |
 | `GET` | `/api/v1/incidents/active` | Current active outages |
 | `GET` | `/api/v1/maintenance` | List maintenance windows |
@@ -142,15 +150,16 @@ make run
 | `GET` | `/api/v1/reports/export.csv` | Export SLA report to CSV |
 | `GET` | `/badge/:target_id.svg` | Dynamic SVG Uptime Badge |
 | `GET` | `/status` | Public status page |
+| `GET` | `/heatmap` | Global latency heatmap matrix |
 | `GET` | `/healthz` | Kubernetes liveness probe |
 | `GET` | `/readyz` | Kubernetes readiness probe |
 | `GET` | `/metrics` | Prometheus metrics scrape endpoint |
 
 ---
 
-## 🏷 Adding SVG Badges to README
+## 🏷 Dynamic README Uptime Badges
 
-Add real-time uptime badges to your repository:
+Embed real-time uptime status directly into your GitHub README:
 
 ```markdown
 ![Uptime](https://pulsegrid.io/badge/your-target-id.svg)
@@ -158,28 +167,13 @@ Add real-time uptime badges to your repository:
 
 ---
 
-## ⚙️ Configuration Reference
-
-| Environment Variable | Default | Description |
-|---|---|---|
-| `PULSEGRID_PORT` | `8080` | Server HTTP port |
-| `PULSEGRID_WORKER_COUNT` | `50` | Concurrent worker pool size |
-| `PULSEGRID_QUEUE_SIZE` | `5000` | Buffer capacity of check job channel |
-| `PULSEGRID_HOST_RATE_LIMIT` | `5.0` | Max checks per second per hostname |
-| `PULSEGRID_SCHEDULER_JITTER` | `0.10` | Jitter offset ratio (10%) |
-| `PULSEGRID_DB_URL` | `postgres://...` | PostgreSQL connection URL |
-| `PULSEGRID_REDIS_ADDR` | `localhost:6379` | Redis address for distributed locking |
-| `PULSEGRID_API_KEY` | `""` | Master admin API key |
-
----
-
-## 🧪 Testing & Benchmarks
+## 🧪 Testing & Stress Benchmarks
 
 ```bash
 # Run unit and race condition tests
 make test
 
-# Run throughput benchmarks
+# Run high-throughput concurrency benchmarks
 make bench
 ```
 
