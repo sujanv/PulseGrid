@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -12,6 +13,8 @@ import (
 
 type DB struct {
 	*sql.DB
+	stmtCache map[string]*sql.Stmt
+	stmtMu    sync.RWMutex
 }
 
 func Connect(cfg config.DatabaseConfig) (*DB, error) {
@@ -35,9 +38,34 @@ func Connect(cfg config.DatabaseConfig) (*DB, error) {
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 
-	return &DB{db}, nil
+	return &DB{
+		DB:        db,
+		stmtCache: make(map[string]*sql.Stmt),
+	}, nil
 }
 
 func (db *DB) HealthCheck(ctx context.Context) error {
 	return db.PingContext(ctx)
+}
+
+func (db *DB) PrepareCached(query string) (*sql.Stmt, error) {
+	db.stmtMu.RLock()
+	stmt, exists := db.stmtCache[query]
+	db.stmtMu.RUnlock()
+	if exists {
+		return stmt, nil
+	}
+
+	db.stmtMu.Lock()
+	defer db.stmtMu.Unlock()
+	if stmt, exists = db.stmtCache[query]; exists {
+		return stmt, nil
+	}
+
+	newStmt, err := db.Prepare(query)
+	if err != nil {
+		return nil, err
+	}
+	db.stmtCache[query] = newStmt
+	return newStmt, nil
 }
