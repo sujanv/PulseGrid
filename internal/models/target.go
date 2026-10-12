@@ -12,6 +12,7 @@ const (
 	TargetHTTP      TargetType = "HTTP"
 	TargetHTTPS     TargetType = "HTTPS"
 	TargetTCP       TargetType = "TCP"
+	TargetUDP       TargetType = "UDP"
 	TargetDNS       TargetType = "DNS"
 	TargetTLS       TargetType = "TLS"
 	TargetPing      TargetType = "PING"
@@ -30,10 +31,17 @@ const (
 )
 
 type AssertionRule struct {
-	Type     string `json:"type"`     // JSONPATH, REGEX, HEADER
-	Property string `json:"property"` // Path, Header name, etc.
-	Operator string `json:"operator"` // equals, contains, greater_than, less_than
+	Type     string `json:"type"`
+	Property string `json:"property"`
+	Operator string `json:"operator"`
 	Expected string `json:"expected"`
+}
+
+type SecurityGrade struct {
+	Grade       string   `json:"grade"`
+	Score       int      `json:"score"`
+	Missing     []string `json:"missing_headers,omitempty"`
+	Warnings    []string `json:"warnings,omitempty"`
 }
 
 type Target struct {
@@ -53,6 +61,7 @@ type Target struct {
 	ExpectedKeyword     string            `json:"expected_keyword,omitempty"`
 	Assertions          []AssertionRule   `json:"assertions,omitempty"`
 	WorkflowJSON        string            `json:"workflow_json,omitempty"`
+	SecurityAudit       *SecurityGrade    `json:"security_audit,omitempty"`
 	FailureThreshold    int               `json:"failure_threshold"`
 	SuccessThreshold    int               `json:"success_threshold"`
 	Active              bool              `json:"active"`
@@ -106,7 +115,7 @@ func (t *Target) Validate() error {
 		if t.Method == "" {
 			t.Method = MethodGET
 		}
-	case TargetTCP, TargetTLS, TargetPing, TargetGRPC:
+	case TargetTCP, TargetUDP, TargetTLS, TargetPing, TargetGRPC:
 		if t.Host == "" && t.URL != "" {
 			u, err := url.Parse(t.URL)
 			if err == nil && u.Hostname() != "" {
@@ -121,8 +130,8 @@ func (t *Target) Validate() error {
 				t.Port = 443
 			} else if t.Type == TargetGRPC {
 				t.Port = 50051
-			} else if t.Type == TargetTCP {
-				return errors.New("valid port (1-65535) is required for TCP")
+			} else if t.Type == TargetTCP || t.Type == TargetUDP {
+				return errors.New("valid port (1-65535) is required")
 			}
 		}
 	case TargetDNS:
