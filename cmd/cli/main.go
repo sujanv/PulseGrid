@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/sujanv/PulseGrid/internal/config"
 	"github.com/sujanv/PulseGrid/internal/models"
 	"github.com/sujanv/PulseGrid/internal/storage/postgres"
+	"github.com/sujanv/PulseGrid/internal/synthetic"
 )
 
 func main() {
@@ -27,6 +30,12 @@ func main() {
 			os.Exit(1)
 		}
 		runCheck(os.Args[2])
+	case "audit":
+		if len(os.Args) < 3 {
+			fmt.Println("Usage: pulsegrid-cli audit <url>")
+			os.Exit(1)
+		}
+		runAudit(os.Args[2])
 	case "seed":
 		runSeed()
 	case "tui":
@@ -42,9 +51,33 @@ func printUsage() {
 	fmt.Println("PulseGrid CLI - Uptime Monitoring & Diagnostics")
 	fmt.Println("Usage:")
 	fmt.Println("  pulsegrid-cli check <url>   - Perform one-off check with latency breakdown")
+	fmt.Println("  pulsegrid-cli audit <url>   - Audit HTTP security headers & calculate posture grade")
 	fmt.Println("  pulsegrid-cli seed          - Populate PostgreSQL with sample targets")
 	fmt.Println("  pulsegrid-cli tui           - Launch live terminal monitoring dashboard")
 	fmt.Println("  pulsegrid-cli export        - Export SLA metrics to terminal")
+}
+
+func runAudit(targetURL string) {
+	fmt.Printf("🛡️ Auditing security headers for %s...\n", targetURL)
+	resp, err := http.Get(targetURL)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	auditor := checker.NewSecurityAuditor()
+	rep := auditor.Audit(resp.Header)
+
+	fmt.Println("──────────────────────────────────────────────────")
+	fmt.Printf("Overall Grade:  %s (%d / 100)\n", rep.Grade, rep.Score)
+	if len(rep.Missing) > 0 {
+		fmt.Printf("Missing Headers: %v\n", rep.Missing)
+	}
+	if len(rep.Warnings) > 0 {
+		fmt.Printf("Warnings:        %v\n", rep.Warnings)
+	}
+	fmt.Println("──────────────────────────────────────────────────")
 }
 
 func runCheck(targetURL string) {
