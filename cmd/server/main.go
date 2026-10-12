@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/sujanv/PulseGrid/internal/agent"
 	"github.com/sujanv/PulseGrid/internal/alert"
+	"github.com/sujanv/PulseGrid/internal/anomaly"
 	"github.com/sujanv/PulseGrid/internal/api"
 	"github.com/sujanv/PulseGrid/internal/checker"
 	"github.com/sujanv/PulseGrid/internal/config"
@@ -24,11 +26,12 @@ import (
 	"github.com/sujanv/PulseGrid/internal/scheduler"
 	"github.com/sujanv/PulseGrid/internal/storage/postgres"
 	"github.com/sujanv/PulseGrid/internal/storage/redis"
+	"github.com/sujanv/PulseGrid/internal/synthetic"
 	"github.com/sujanv/PulseGrid/internal/web"
 )
 
 func main() {
-	log.Println("⚡ Starting PulseGrid Uptime Monitoring Service...")
+	log.Println("⚡ Starting PulseGrid Uptime & Synthetic Monitoring Service...")
 
 	cfg := config.Load()
 
@@ -48,7 +51,6 @@ func main() {
 		incidentRepo = postgres.NewIncidentRepository(db)
 		log.Println("[Storage] Connected to PostgreSQL and applied migrations.")
 
-		// Start background rollup and pruning worker (every 1 hour)
 		rollupWorker := postgres.NewRollupWorker(db, 30)
 		rollupWorker.Start(context.Background(), 1*time.Hour)
 	}
@@ -64,20 +66,26 @@ func main() {
 		log.Println("[Storage] Connected to Redis.")
 	}
 
-	// 2. Health Checker Registry with all protocols
+	// 2. Health Checker Registry with all protocols & synthetics
 	registry := checker.NewRegistry()
+	registry.Register(models.TargetSynthetic, synthetic.NewSyntheticChecker(cfg.Pool.DefaultTimeout))
+	registry.Register(models.TargetUDP, checker.NewUDPChecker())
 
 	// 3. Concurrency Worker Pool & Rate Limiter
 	workerPool := pool.NewWorkerPool(cfg.Pool.WorkerCount, cfg.Pool.QueueSize)
 	rateLimiter := pool.NewPerHostRateLimiter(cfg.Pool.PerHostRateLimit)
 	log.Printf("[WorkerPool] Initialized with %d workers, queue capacity %d.", cfg.Pool.WorkerCount, cfg.Pool.QueueSize)
 
-	// 4. Maintenance & Consensus engines
+	// 4. Maintenance, Consensus & Anomaly Detection Engines
 	maintManager := maintenance.NewManager()
 	quorumConsensus := consensus.NewQuorumConsensus(60*time.Second, 0.60)
+	anomalyDetector := anomaly.NewAnomalyDetector(3.0)
+	edgeCoordinator := agent.NewCoordinator()
 
-	// 5. Alerting Subsystem
+	// 5. Alerting & Escalation Subsystem
 	alertDispatcher := alert.NewDispatcher(5, 500, cfg.Alert.MaxRetries)
+	escalationManager := alert.NewEscalationManager(alertDispatcher)
+
 	if cfg.Alert.SMTPHost != "" {
 		alertDispatcher.RegisterChannel(alert.NewEmailChannel(
 			cfg.Alert.SMTPHost, cfg.Alert.SMTPPort, cfg.Alert.SMTPUser,
@@ -88,7 +96,11 @@ func main() {
 	// 6. Incident Detection Engine
 	detector := engine.NewIncidentDetector(incidentRepo, func(event *models.AlertEvent) {
 		log.Printf("[Alert] %s: %s", event.EventType, event.Message)
-		alertDispatcher.Dispatch(event)
+		if event.EventType == models.AlertOutage {
+			escalationManager.HandleOutage(event)
+		} else {
+			escalationManager.HandleRecovery(event)
+		}
 	})
 	detector.SetMaintenanceManager(maintManager)
 	detector.SetConsensusEngine(quorumConsensus)
@@ -105,12 +117,19 @@ func main() {
 				if resultRepo != nil {
 					_ = resultRepo.SaveResult(context.Background(), res)
 				}
+
+				// Check for statistical anomaly
+				if ev, isAnomaly := anomalyDetector.Observe(target.ID, float64(res.Latency.Milliseconds())); isAnomaly {
+					metrics.LatencyAnomaliesTotal.WithLabelValues(target.ID).Inc()
+					log.Printf("[Anomaly] Target %s latency spike: %.2fms (baseline: %.2fms)", target.Name, ev.ObservedMs, ev.BaselineMs)
+				}
+
 				detector.ProcessResult(context.Background(), target, res)
 			}
 		},
 	)
 
-	// Load targets if repo available
+	// Load targets from DB
 	if targetRepo != nil {
 		targets, err := targetRepo.ListActive(context.Background())
 		if err == nil {
@@ -125,6 +144,7 @@ func main() {
 	router := api.NewRouter()
 	router.HandleFunc("/", web.Handler())
 	router.HandleFunc("/dashboard", web.Handler())
+	router.HandleFunc("/heatmap", web.ServeHeatmap)
 	router.Handle("/metrics", promhttp.Handler())
 
 	statusPage := web.NewStatusPageHandler(targetRepo, resultRepo, incidentRepo)
@@ -141,11 +161,27 @@ func main() {
 	router.HandleFunc("/api/v1/maintenance", maintHandler.HandleWindows)
 	router.HandleFunc("/api/v1/maintenance/", maintHandler.HandleWindows)
 
+	anomalyHandler := api.NewAnomalyHandler(anomalyDetector)
+	router.HandleFunc("/api/v1/targets/", func(w http.ResponseWriter, r *http.Request) {
+		if len(r.URL.Path) > 10 && r.URL.Path[len(r.URL.Path)-10:] == "/anomalies" {
+			anomalyHandler.HandleAnomalies(w, r)
+		}
+	})
+
 	if targetRepo != nil {
 		targetHandler := api.NewTargetHandler(targetRepo)
 		router.HandleFunc("/api/v1/targets", targetHandler.HandleTargets)
 		router.HandleFunc("/api/v1/targets/", targetHandler.HandleTargetByID)
+
+		syntheticHandler := api.NewSyntheticHandler(targetRepo)
+		router.HandleFunc("/api/v1/synthetics", syntheticHandler.HandleCreateSynthetic)
+		router.HandleFunc("/api/v1/synthetics/run", syntheticHandler.HandleTestRun)
 	}
+
+	agentHandler := api.NewAgentHandler(edgeCoordinator)
+	router.HandleFunc("/api/v1/agents/register", agentHandler.HandleRegister)
+	router.HandleFunc("/api/v1/agents/heartbeat", agentHandler.HandleHeartbeat)
+	router.HandleFunc("/api/v1/agents", agentHandler.HandleList)
 
 	if resultRepo != nil {
 		resultHandler := api.NewResultHandler(resultRepo)
