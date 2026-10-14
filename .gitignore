@@ -1,7 +1,7 @@
 # Binaries
 bin/
-pulsegrid
-pulsegrid-cli
+/pulsegrid
+/pulsegrid-cli
 *.exe
 *.dll
 *.so
