@@ -6,8 +6,8 @@ import (
 )
 
 type SecurityReport struct {
-	Grade       string            `json:"grade"` // A+, A, B, C, F
-	Score       int               `json:"score"` // 0 - 100
+	Grade       string            `json:"grade"`
+	Score       int               `json:"score"`
 	Headers     map[string]string `json:"headers"`
 	Missing     []string          `json:"missing"`
 	Warnings    []string          `json:"warnings"`
@@ -35,7 +35,6 @@ func (a *SecurityAuditor) Audit(headers http.Header) *SecurityReport {
 		}
 	}
 
-	// 1. Strict-Transport-Security (HSTS)
 	hsts := headers.Get("Strict-Transport-Security")
 	if hsts == "" {
 		score -= 25
@@ -47,19 +46,10 @@ func (a *SecurityAuditor) Audit(headers http.Header) *SecurityReport {
 		}
 	}
 
-	// 2. Content-Security-Policy (CSP)
 	checkHeader("Content-Security-Policy", "CSP protects against XSS", 25)
-
-	// 3. X-Frame-Options
 	checkHeader("X-Frame-Options", "Protects against clickjacking", 15)
-
-	// 4. X-Content-Type-Options
 	checkHeader("X-Content-Type-Options", "Prevents MIME sniffing", 15)
-
-	// 5. Referrer-Policy
 	checkHeader("Referrer-Policy", "Controls referrer disclosure", 10)
-
-	// 6. Permissions-Policy
 	checkHeader("Permissions-Policy", "Controls browser features", 10)
 
 	if score < 0 {
