@@ -128,6 +128,30 @@ CREATE TABLE IF NOT EXISTS daily_rollups (
 CREATE INDEX IF NOT EXISTS idx_rollups_date ON daily_rollups (rollup_date DESC);
 `,
 	},
+	{
+		name: "007_create_remediation_actions",
+		sql: `
+CREATE TABLE IF NOT EXISTS remediation_rules (
+    id VARCHAR(64) PRIMARY KEY,
+    target_id VARCHAR(64) NOT NULL,
+    action_type VARCHAR(32) NOT NULL DEFAULT 'WEBHOOK',
+    action_url TEXT NOT NULL,
+    cooldown_seconds INT NOT NULL DEFAULT 900,
+    enabled BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS remediation_audits (
+    id VARCHAR(64) PRIMARY KEY,
+    target_id VARCHAR(64) NOT NULL,
+    action_url TEXT NOT NULL,
+    status_code INT NOT NULL,
+    duration_ms DOUBLE PRECISION NOT NULL,
+    success BOOLEAN NOT NULL,
+    error_message TEXT DEFAULT '',
+    executed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+`,
+	},
 }
 
 func RunMigrations(db *sql.DB) error {
