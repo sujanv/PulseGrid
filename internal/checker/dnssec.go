@@ -27,7 +27,6 @@ func (c *DNSSECChecker) Check(ctx context.Context, target *models.Target) (*mode
 	}
 
 	start := time.Now()
-	// Lookup TXT / CNAME / A records as validation proxy
 	records, err := c.resolver.LookupHost(ctx, host)
 	latency := time.Since(start)
 
