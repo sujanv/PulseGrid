@@ -48,7 +48,7 @@ func TestRegexEvaluator(t *testing.T) {
 	eval := assertion.NewRegexEvaluator()
 	body := "API server v2.4.1 running normally"
 
-	matched, err := eval.Matches("v2\.[0-9]+\.[0-9]+", body)
+	matched, err := eval.Matches(`v2\.[0-9]+\.[0-9]+`, body)
 	if err != nil || !matched {
 		t.Errorf("expected regex match on version pattern")
 	}

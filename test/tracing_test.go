@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sujanv/PulseGrid/internal/models"
 	"github.com/sujanv/PulseGrid/internal/tracing"
 )
 

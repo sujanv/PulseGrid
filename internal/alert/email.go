@@ -72,11 +72,9 @@ func (e *EmailChannel) Send(ctx context.Context, event *models.AlertEvent) error
 
 	var msg strings.Builder
 	for k, v := range headers {
-		msg.WriteString(fmt.Sprintf("%s: %s
-", k, v))
+		msg.WriteString(fmt.Sprintf("%s: %s\r\n", k, v))
 	}
-	msg.WriteString("
-" + htmlBody)
+	msg.WriteString("\r\n" + htmlBody)
 
 	auth := smtp.PlainAuth("", e.smtpUser, e.smtpPass, e.smtpHost)
 	addr := fmt.Sprintf("%s:%d", e.smtpHost, e.smtpPort)

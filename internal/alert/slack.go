@@ -50,22 +50,17 @@ func (s *SlackChannel) Send(ctx context.Context, event *models.AlertEvent) error
 					{
 						"type": "section",
 						"fields": []map[string]string{
-							{"type": "mrkdwn", "text": fmt.Sprintf("*Target:*
-%s", event.TargetName)},
-							{"type": "mrkdwn", "text": fmt.Sprintf("*Endpoint:*
-`%s`", event.TargetURL)},
-							{"type": "mrkdwn", "text": fmt.Sprintf("*Status:*
-%s", event.EventType)},
-							{"type": "mrkdwn", "text": fmt.Sprintf("*Time:*
-%s", event.Timestamp.Format(time.RFC3339))},
+							{"type": "mrkdwn", "text": fmt.Sprintf("*Target:*\n%s", event.TargetName)},
+							{"type": "mrkdwn", "text": fmt.Sprintf("*Endpoint:*\n`%s`", event.TargetURL)},
+							{"type": "mrkdwn", "text": fmt.Sprintf("*Status:*\n%s", event.EventType)},
+							{"type": "mrkdwn", "text": fmt.Sprintf("*Time:*\n%s", event.Timestamp.Format(time.RFC3339))},
 						},
 					},
 					{
 						"type": "section",
 						"text": map[string]string{
 							"type": "mrkdwn",
-							"text": fmt.Sprintf("*Details:*
-%s", event.Message),
+							"text": fmt.Sprintf("*Details:*\n%s", event.Message),
 						},
 					},
 				},

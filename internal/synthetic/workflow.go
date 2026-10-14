@@ -1,14 +1,8 @@
 package synthetic
 
 import (
-	"context"
-	"fmt"
-	"io"
 	"net/http"
-	"strings"
 	"time"
-
-	"github.com/google/uuid"
 	"github.com/sujanv/PulseGrid/internal/assertion"
 )
 
