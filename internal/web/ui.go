@@ -53,7 +53,9 @@ const DashboardHTML = `<!DOCTYPE html>
     <header>
       <div class="logo">⚡ Pulse<span>Grid</span></div>
       <div>
-        <a href="/metrics" target="_blank" style="color: var(--accent); margin-right: 16px; text-decoration: none; font-size: 14px;">Prometheus Metrics</a>
+        <a href="/status" style="color: var(--accent); margin-right: 16px; text-decoration: none; font-size: 14px;">Public Status</a>
+        <a href="/heatmap" style="color: var(--accent); margin-right: 16px; text-decoration: none; font-size: 14px;">Regional Heatmap</a>
+        <a href="/metrics" target="_blank" style="color: var(--accent); margin-right: 16px; text-decoration: none; font-size: 14px;">Prometheus</a>
         <button class="btn" onclick="alert('Adding targets via POST /api/v1/targets')">+ New Monitor</button>
       </div>
     </header>
@@ -68,8 +70,8 @@ const DashboardHTML = `<!DOCTYPE html>
         <div class="stat-val" style="color: #3fb950;" id="stat-uptime">99.98%</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Average Latency</div>
-        <div class="stat-val" id="stat-latency">-- ms</div>
+        <div class="stat-label">Live Stream (SSE)</div>
+        <div class="stat-val" style="color: #58a6ff;" id="stat-stream">Connected</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Active Incidents</div>
@@ -97,7 +99,7 @@ const DashboardHTML = `<!DOCTYPE html>
         }
 
         container.innerHTML = targets.map(t => `
-          <div class="target-card">
+          <div class="target-card" id="card-${t.id}">
             <div class="target-header">
               <span class="target-title">${t.name}</span>
               <span class="badge badge-up">UP</span>
@@ -109,7 +111,7 @@ const DashboardHTML = `<!DOCTYPE html>
             <div class="footer-meta">
               <span>Interval: ${t.interval_seconds || 30}s</span>
               <span>Timeout: ${t.timeout_seconds || 10}s</span>
-              <span>Concurrency: Bounded</span>
+              <span>Live Mode: SSE Enabled</span>
             </div>
           </div>
         `).join('');
@@ -117,8 +119,16 @@ const DashboardHTML = `<!DOCTYPE html>
         console.error(err);
       }
     }
+
+    if (window.EventSource) {
+      const sse = new EventSource('/api/v1/stream/results');
+      sse.onmessage = function(e) {
+        document.getElementById('stat-stream').innerText = 'Streaming ⚡';
+      };
+    }
+
     loadData();
-    setInterval(loadData, 10000);
+    setInterval(loadData, 15000);
   </script>
 </body>
 </html>`
