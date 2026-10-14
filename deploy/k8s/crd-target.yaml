@@ -1,0 +1,41 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: probetargets.monitoring.pulsegrid.io
+spec:
+  group: monitoring.pulsegrid.io
+  names:
+    kind: ProbeTarget
+    listKind: ProbeTargetList
+    plural: probetargets
+    singular: probetarget
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                url:
+                  type: string
+                intervalSeconds:
+                  type: integer
+                  default: 30
+                timeoutSeconds:
+                  type: integer
+                  default: 10
+                expectedStatusCodes:
+                  type: array
+                  items:
+                    type: integer
+                failureThreshold:
+                  type: integer
+                  default: 3
+                active:
+                  type: boolean
+                  default: true
