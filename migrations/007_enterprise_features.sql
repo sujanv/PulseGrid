@@ -1,0 +1,55 @@
+-- PulseGrid Enterprise Schema Migrations: RBAC, SLOs, Status Pages
+
+CREATE TABLE IF NOT EXISTS tenants (
+    id VARCHAR(64) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    plan VARCHAR(64) NOT NULL DEFAULT 'enterprise',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS api_keys (
+    id VARCHAR(64) PRIMARY KEY,
+    tenant_id VARCHAR(64) REFERENCES tenants(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    key_hash VARCHAR(255) NOT NULL UNIQUE,
+    role VARCHAR(32) NOT NULL DEFAULT 'viewer',
+    expires_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS slos (
+    id VARCHAR(64) PRIMARY KEY,
+    target_id VARCHAR(64) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    objective_percent DOUBLE PRECISION NOT NULL DEFAULT 99.9,
+    window_days INT NOT NULL DEFAULT 30,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS slo_burn_history (
+    id SERIAL PRIMARY KEY,
+    slo_id VARCHAR(64) REFERENCES slos(id) ON DELETE CASCADE,
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    window_hours INT NOT NULL,
+    burn_rate DOUBLE PRECISION NOT NULL,
+    severity VARCHAR(32) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS status_components (
+    id VARCHAR(64) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    group_name VARCHAR(255) NOT NULL DEFAULT 'General',
+    status VARCHAR(64) NOT NULL DEFAULT 'OPERATIONAL',
+    target_id VARCHAR(64),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS status_subscribers (
+    id VARCHAR(64) PRIMARY KEY,
+    type VARCHAR(32) NOT NULL,
+    endpoint VARCHAR(512) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_slos_target_id ON slos(target_id);
+CREATE INDEX IF NOT EXISTS idx_status_components_group ON status_components(group_name);
