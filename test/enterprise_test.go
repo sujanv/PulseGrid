@@ -99,7 +99,7 @@ func TestRSSAndAtomFeedGeneration(t *testing.T) {
 	}
 
 	rss := gen.GenerateRSS(items)
-	if !strings.Contains(rss, "<rss version="2.0">") || !strings.Contains(rss, "inc-101") {
+	if !strings.Contains(rss, `<rss version="2.0">`) || !strings.Contains(rss, "inc-101") {
 		t.Errorf("invalid RSS output: %s", rss)
 	}
 
