@@ -1,122 +1,180 @@
-# PulseGrid ⚡
+# ⚡ PulseGrid
 
-**PulseGrid** is an enterprise-grade, bounded-concurrency uptime and synthetic monitoring platform written in Go. Designed to schedule, execute, and analyze thousands of checks across multiple protocols (HTTP/S, TCP, UDP, DNS, TLS, ICMP Ping, WebSocket, gRPC, and Multi-Step Synthetics) while strictly bounding memory and goroutine footprints.
+> **Enterprise-Grade Distributed Uptime & Synthetic Monitoring Platform**  
+> Built with Go 1.22+, PostgreSQL, Redis, Prometheus, and Kubernetes Operator.
 
----
-
-## 🌟 Advanced Features & Capabilities
-
-- **Bounded-Concurrency Worker Pool**: High-performance goroutine pool with dynamic resizing and backpressure rejection handling.
-- **Microsecond Phase Latency Breakdown**: Powered by `net/http/httptrace` to record DNS lookup, TCP connect, TLS handshake, and Time-to-First-Byte (TTFB).
-- **Multi-Step Synthetic User Journeys**: Execute multi-request workflows (e.g. login -> token extraction -> authenticated API call) with dynamic variable interpolation (`{{authToken}}`).
-- **Statistical Anomaly Detection**: Real-time sliding-window Welford algorithm detecting latency spikes ($Z > 3.0$) and diurnal baselines before total outages occur.
-- **Intelligent Alert Escalation & Quiet Hours**:
-  - Multi-tier delayed escalation policies (Tier 1 immediate -> Tier 2 after 10m -> Tier 3 after 30m).
-  - Timezone-aware quiet hours suppression that prevents non-critical notifications from waking on-call engineers.
-  - Alert grouping to bundle cascading multi-service outages into unified summaries.
-- **Enterprise Alert Integrations**:
-  - PagerDuty Events API v2 (auto-deduplication and resolution).
-  - Atlassian OpsGenie with priority tagging (P1-P5).
-  - Twilio SMS with automated truncation.
-  - Telegram Bot API with markdown alert notifications.
-  - Microsoft Teams / Office 365 Adaptive Cards.
-  - Slack Block Kit and Discord rich embeds.
-  - SMTP Email delivery with responsive HTML templates.
-- **Multi-Region Quorum Consensus**: Geo-distributed synthetic agents requiring majority consensus (e.g., 2 of 3 regions) to eliminate false positives.
-- **Security & DNSSEC Posture Auditing**:
-  - HTTP security header analyzer with automated scoring (A+ through F) covering HSTS, CSP, X-Frame-Options, and Permissions-Policy.
-  - DNSSEC validation and SSL/TLS revocation check via OCSP Stapling.
-- **Maintenance Windows & Silence Rules**: Target-specific or global maintenance windows with scheduled suppression of alerts and SLA pauses.
-- **Automated Data Rollups & Retention Pruning**: Background hourly worker aggregates check results into daily summaries and prunes raw time-series records.
-- **Observability & Visualizations**:
-  - Dynamic Shields.io-compatible SVG uptime badges (`/badge/{id}.svg`).
-  - Public status page (`/status`).
-  - Terminal TUI Mode (`pulsegrid-cli tui`).
-  - Global latency heatmap (`/heatmap`).
-  - Native Prometheus metrics (`/metrics`) and pre-configured Grafana dashboards.
+[![Go Version](https://img.shields.io/badge/go-1.22+-blue.svg)](https://golang.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](deploy/docker-compose.yml)
+[![Kubernetes Operator](https://img.shields.io/badge/k8s-operator-326ce5.svg)](deploy/helm/pulsegrid)
+[![OpenTelemetry](https://img.shields.io/badge/opentelemetry-tracing-f5a800.svg)](internal/tracing)
 
 ---
 
-## 🏗 High-Level Architecture
+## 📖 Table of Contents
 
+- [Overview](#-overview)
+- [Architecture](#-architecture)
+- [Core Features](#-core-features)
+  - [High-Throughput Bounded Concurrency Worker Pool](#high-throughput-bounded-concurrency-worker-pool)
+  - [Multi-Protocol Probing Engines](#multi-protocol-probing-engines)
+  - [Multi-Step Synthetic User Journeys](#multi-step-synthetic-user-journeys)
+  - [Google SRE Multi-Window Burn-Rate SLO Engine](#google-sre-multi-window-burn-rate-slo-engine)
+  - [Network Path Visualizer & Hop-by-Hop Traceroute](#network-path-visualizer--hop-by-hop-traceroute)
+  - [Real-Time SSE & WebSocket Streaming](#real-time-sse--websocket-streaming)
+  - [Automated Self-Healing Remediation](#automated-self-healing-remediation)
+  - [OpenTelemetry Tracing & Waterfall Visualizer](#opentelemetry-tracing--waterfall-visualizer)
+  - [Multi-Tenant RBAC & JWT Authentication](#multi-tenant-rbac--jwt-authentication)
+  - [Kubernetes Operator & Helm Automation](#kubernetes-operator--helm-automation)
+  - [Public Status Pages, Subscribers & RSS/Atom Feeds](#public-status-pages-subscribers--rssatom-feeds)
+- [Quick Start](#-quick-start)
+- [CLI Reference](#-cli-reference)
+- [REST API Matrix](#-rest-api-matrix)
+- [Testing & Benchmarking](#-testing--benchmarking)
+- [License](#-license)
+
+---
+
+## 🔭 Overview
+
+**PulseGrid** is an intermediate-to-advanced uptime monitoring and synthetic transaction service engineered in Go. It empowers reliability engineering (SRE) teams to schedule, probe, analyze, and alert on tens of thousands of targets with strictly bounded resource usage.
+
+PulseGrid eliminates blind spots through multi-region consensus verification, hop-by-hop network path diagnosis, SSL/TLS certificate revocation tracking (OCSP), HTTP security header grading (A+ to F), automated incident escalation policies, and self-healing webhooks.
+
+---
+
+## 🏛 Architecture
+
+```mermaid
+flowchart TD
+    subgraph Scheduling & Ingestion
+        Sched[Cron & Distributed Scheduler] --> Q[Redis Priority Queue]
+        K8sOp[K8s Operator & Ingress Watcher] -->|Sync Targets| Postgres[(PostgreSQL)]
+    end
+
+    subgraph Execution Engine
+        Q --> WP[Worker Pool - Bounded Concurrency]
+        WP --> ChkHTTP[HTTP/HTTPS Checker]
+        WP --> ChkTCP[TCP / Port Probe]
+        WP --> ChkUDP[UDP Reachability Probe]
+        WP --> ChkDNS[DNS & DNSSEC Validator]
+        WP --> ChkTLS[TLS & OCSP Stapling]
+        WP --> ChkSynth[Synthetic Multi-Step Runner]
+        WP --> ChkTrace[Network Traceroute Engine]
+    end
+
+    subgraph Observability & Analysis
+        WP --> OTel[OpenTelemetry Span Collector]
+        WP --> Anom[Welford Latency Anomaly Detector]
+        WP --> SLO[Google SRE Burn Rate Evaluator]
+        WP --> RCA[Root Cause Analysis Engine]
+        WP --> PubSub[Internal Pub/Sub Event Bus]
+    end
+
+    subgraph Delivery & Action
+        PubSub --> SSE[Server-Sent Events /stream/results]
+        PubSub --> WS[WebSocket Realtime Terminal]
+        PubSub --> Rem[Self-Healing Remediation Engine]
+        PubSub --> Alert[Alert Escalation Router]
+        Alert --> Slack[Slack / PagerDuty / OpsGenie / Twilio SMS]
+        PubSub --> StatusPage[Public Status Page & RSS/Atom Feed]
+    end
 ```
-                    ┌───────────────────────────────────┐
-                    │      Scheduler with Jitter        │
-                    │   (Prevents Thundering Herd)      │
-                    └─────────────────┬─────────────────┘
-                                      │
-                                      ▼
-                    ┌───────────────────────────────────┐
-                    │      Per-Host Rate Limiter        │
-                    │   (Token Bucket per Domain)       │
-                    └─────────────────┬─────────────────┘
-                                      │
-                                      ▼
-                    ┌───────────────────────────────────┐
-                    │      Buffered Job Queue (Ch)      │
-                    └─────────────────┬─────────────────┘
-                                      │
-           ┌──────────────────────────┼──────────────────────────┐
-           ▼                          ▼                          ▼
-    ┌──────────────┐           ┌──────────────┐           ┌──────────────┐
-    │   Worker 1   │           │   Worker 2   │           │   Worker N   │  (Fixed Pool: 50–500)
-    └──────┬───────┘           └──────┬───────┘           └──────┬───────┘
-           │                          │                          │
-           └──────────────────────────┼──────────────────────────┘
-                                      │
-                                      ▼
-           ┌─────────────────────────────────────────────────────┐
-           │     Assertion & Synthetic Transaction Engine        │
-           └──────────────────────────┬──────────────────────────┘
-                                      │
-                                      ▼
-           ┌─────────────────────────────────────────────────────┐
-           │        Incident Detector & Anomaly Engine           │
-           │  (Welford Z-Score, Maintenance, Quorum Consensus)   │
-           └──────────────────────────┬──────────────────────────┘
-                                      │
-                                      ▼
-           ┌─────────────────────────────────────────────────────┐
-           │   Escalation Router & Multi-Channel Alert Queue     │
-           │ (PagerDuty / OpsGenie / Slack / Teams / SMS / Mail) │
-           └─────────────────────────────────────────────────────┘
-```
 
 ---
 
-## 🚀 Quickstart
+## 🚀 Core Features
 
-### Running the Full Stack (PulseGrid + PostgreSQL + Redis + Prometheus + Grafana)
+### High-Throughput Bounded Concurrency Worker Pool
+Executes tens of thousands of probes without goroutine leaks. Backed by dynamic worker autoscaling, context timeout enforcement, and memory-safe buffer recycling.
+
+### Multi-Protocol Probing Engines
+- **HTTP / HTTPS**: Full response assertion (body regex, status codes, response headers).
+- **TCP / Port**: Connection handshake and payload echo validation.
+- **UDP**: Reachability testing with ICMP port-unreachable detection.
+- **DNS & DNSSEC**: Record lookup, validation of RRSIG cryptographic signatures, and DNSSEC chain validation.
+- **TLS & OCSP Stapling**: SSL expiration alerts, certificate revocation verification via OCSP stapling and CRL.
+- **HTTP Security Headers Auditor**: Automated audit and A+ to F grading for HSTS, CSP, X-Frame-Options, and Permissions-Policy.
+
+### Multi-Step Synthetic User Journeys
+Test critical user workflows (login -> extract JWT -> call API -> checkout) with JSONPath extraction and runtime variable interpolation.
+
+### Google SRE Multi-Window Burn-Rate SLO Engine
+Implements standard multi-window burn rate alerts directly out of the Google SRE Handbook:
+- **1-Hour Window (14.4x Burn Rate)**: Consumes 2% error budget in 1 hour -> PagerDuty Critical.
+- **6-Hour Window (6.0x Burn Rate)**: Consumes 5% error budget in 6 hours -> High severity alert.
+- **24-Hour / 3-Day Window (3.0x / 1.0x Burn Rate)**: Error budget depletion alerts dispatched to ticket queues.
+- Real-time time-to-exhaustion forecasts in hours.
+
+### Network Path Visualizer & Hop-by-Hop Traceroute
+Identifies intermediate ISP packet loss, BGP route flaps, and router latency degradation across transit hops before total downtime occurs.
+
+### Real-Time SSE & WebSocket Streaming
+Live streaming check execution results via Server-Sent Events (`/api/v1/stream/results`) and full-duplex WebSockets for real-time status dashboards and CLI feeds.
+
+### Automated Self-Healing Remediation
+Configurable webhooks and cloud function triggers triggered automatically on outage detection, protected by cooldown circuit breakers to prevent flapping reboot loops.
+
+### OpenTelemetry Tracing & Waterfall Visualizer
+End-to-end distributed trace spans for every probe phase (DNS resolution, TCP connect, TLS handshake, TTFB, and response transfer) with Prometheus metrics bridge.
+
+### Multi-Tenant RBAC & JWT Authentication
+Hierarchical access control:
+- **Viewer**: Read-only status inspection and metrics dashboards.
+- **Operator**: Target management and on-demand synthetic execution.
+- **Admin**: Alert routing, quiet hours, and SLO configuration.
+- **Owner**: Full tenant administration and API key rotation.
+
+### Kubernetes Operator & Helm Automation
+- Custom Resource Definition (`ProbeTarget`) for declarative monitoring infrastructure.
+- Ingress annotation auto-discovery: annotate any Kubernetes Ingress with `pulsegrid.io/monitor: "true"` for zero-touch configuration.
+- Helm charts ready for one-command cluster installation.
+
+### Public Status Pages, Subscribers & RSS/Atom Feeds
+- Component group aggregation (Operational, Degraded, Partial Outage, Major Outage).
+- Email & webhook subscription management.
+- Live RSS 2.0 (`/status/feed.rss`) and Atom (`/status/feed.atom`) incident publication feeds.
+
+---
+
+## ⚡ Quick Start
+
+### 1. Run with Docker Compose
 
 ```bash
-docker-compose -f deploy/docker-compose.yml up -d --build
+git clone https://github.com/sujanv/PulseGrid.git
+cd PulseGrid
+docker-compose up -d
 ```
 
-Access services:
-- **Admin Dashboard**: [http://localhost:8080](http://localhost:8080)
+### 2. Verify Services
+
+- **Web Dashboard**: [http://localhost:8080](http://localhost:8080)
 - **Public Status Page**: [http://localhost:8080/status](http://localhost:8080/status)
-- **Regional Latency Heatmap**: [http://localhost:8080/heatmap](http://localhost:8080/heatmap)
 - **Prometheus Metrics**: [http://localhost:8080/metrics](http://localhost:8080/metrics)
-- **Grafana Dashboard**: [http://localhost:3000](http://localhost:3000) (User: `admin` / Password: `admin`)
-- **Health Probes**: [http://localhost:8080/healthz](http://localhost:8080/healthz) and `/readyz`
+- **Health Probes**: [http://localhost:8080/healthz](http://localhost:8080/healthz)
 
-### Local Development & CLI
+---
+
+## 💻 CLI Reference
+
+PulseGrid includes an enterprise CLI tool for immediate probes, network diagnostics, and on-demand testing:
 
 ```bash
-# Build binaries
-make build
+# Execute immediate single HTTP probe
+./bin/pulsegrid-cli check https://example.com --timeout=5
 
-# Launch Terminal TUI Mode
-./bin/pulsegrid-cli tui
+# Execute hop-by-hop traceroute network diagnostic
+./bin/pulsegrid-cli traceroute example.com
 
-# Probe endpoint with full latency phase breakdown
-./bin/pulsegrid-cli check https://github.com
+# Calculate Google SRE error budget and time-to-exhaustion
+./bin/pulsegrid-cli slo-calc tgt-payment-service
 
-# Audit HTTP security headers & calculate posture grade
-./bin/pulsegrid-cli audit https://github.com
+# Run SSL and HTTP security headers audit (A+ to F grade)
+./bin/pulsegrid-cli audit https://api.pulsegrid.io
 
-# Seed sample monitors
-./bin/pulsegrid-cli seed
+# Execute multi-step synthetic transaction
+./bin/pulsegrid-cli synthetic ./examples/synthetic-checkout.json
 
 # Export 30-day SLA performance report
 ./bin/pulsegrid-cli export
@@ -124,57 +182,38 @@ make build
 
 ---
 
-## 📡 REST API Reference
+## 📡 REST API Matrix
 
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/v1/targets` | List all monitored targets |
 | `POST` | `/api/v1/targets` | Register a new target |
 | `GET` | `/api/v1/targets/:id` | Get target details |
-| `PUT` | `/api/v1/targets/:id` | Update target configuration |
-| `DELETE` | `/api/v1/targets/:id` | Remove target |
 | `GET` | `/api/v1/targets/:id/results` | Historical check results |
-| `GET` | `/api/v1/targets/:id/stats` | Latency percentiles (P50, P95, P99) & Uptime % |
-| `GET` | `/api/v1/targets/:id/anomalies` | Latency spike anomaly history |
-| `POST` | `/api/v1/synthetics` | Create multi-step synthetic transaction |
-| `POST` | `/api/v1/synthetics/run` | Execute on-demand test of synthetic workflow |
-| `GET` | `/api/v1/agents` | List registered synthetic edge agents |
-| `POST` | `/api/v1/agents/register` | Register new remote edge agent |
-| `POST` | `/api/v1/agents/heartbeat` | Edge agent heartbeat |
-| `GET` | `/api/v1/incidents` | Incident history |
-| `GET` | `/api/v1/incidents/active` | Current active outages |
-| `GET` | `/api/v1/maintenance` | List maintenance windows |
-| `POST` | `/api/v1/maintenance` | Create a maintenance window |
-| `DELETE` | `/api/v1/maintenance/:id` | Delete a maintenance window |
-| `GET` | `/api/v1/reports/sla` | 30-day SLA performance report |
-| `GET` | `/api/v1/reports/export.csv` | Export SLA report to CSV |
+| `GET` | `/api/v1/targets/:id/stats` | P50, P95, P99 Latency & Uptime % |
+| `GET` | `/api/v1/targets/:id/traces` | OpenTelemetry waterfall spans |
+| `GET` | `/api/v1/network/traceroute?host=...` | Hop-by-hop network path diagnosis |
+| `GET` | `/api/v1/slo/burn-rate?target_id=...` | Multi-window burn-rate error budget |
+| `POST` | `/api/v1/synthetics/run` | Execute on-demand synthetic workflow |
+| `GET` | `/api/v1/stream/results` | Server-Sent Events (SSE) live results |
+| `POST` | `/api/v1/remediation/:id` | Configure automated remediation action |
+| `GET` | `/api/v1/statuspage/components` | Component status summary |
+| `GET` | `/status/feed.rss` | RSS 2.0 incident feed |
+| `GET` | `/status/feed.atom` | Atom XML incident feed |
 | `GET` | `/badge/:target_id.svg` | Dynamic SVG Uptime Badge |
-| `GET` | `/status` | Public status page |
-| `GET` | `/heatmap` | Global latency heatmap matrix |
 | `GET` | `/healthz` | Kubernetes liveness probe |
-| `GET` | `/readyz` | Kubernetes readiness probe |
 | `GET` | `/metrics` | Prometheus metrics scrape endpoint |
 
 ---
 
-## 🏷 Dynamic README Uptime Badges
-
-Embed real-time uptime status directly into your GitHub README:
-
-```markdown
-![Uptime](https://pulsegrid.io/badge/your-target-id.svg)
-```
-
----
-
-## 🧪 Testing & Stress Benchmarks
+## 🧪 Testing & Benchmarking
 
 ```bash
 # Run unit and race condition tests
-make test
+go test -v -race ./...
 
-# Run high-throughput concurrency benchmarks
-make bench
+# Run concurrency stress benchmark test
+go test -v -bench=. ./test/stress_test.go
 ```
 
 ---
