@@ -45,7 +45,7 @@ func (m *DOMMatcher) HasElementWithID(htmlContent, id string) bool {
 }
 
 func (m *DOMMatcher) HasElementWithClass(htmlContent, className string) bool {
-	pattern := fmt.Sprintf(`(?i)class=["'][^"']*%s[^"']*["']`, regexp.QuoteMeta(className))
+	pattern := fmt.Sprintf(`(?i)class=["'][^"']*\b%s\b[^"']*["']`, regexp.QuoteMeta(className))
 	re := regexp.MustCompile(pattern)
 	return re.MatchString(htmlContent)
 }

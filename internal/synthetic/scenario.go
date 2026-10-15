@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/cookiejar"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
