@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/sujanv/PulseGrid/internal/canary"
 	"github.com/sujanv/PulseGrid/internal/checker"
 	"github.com/sujanv/PulseGrid/internal/consensus"
 	"github.com/sujanv/PulseGrid/internal/models"
@@ -23,6 +25,9 @@ func printUsage() {
 	fmt.Println()
 	fmt.Println("Usage:")
 	fmt.Println("  pulsegrid-cli check <url>             Execute immediate single probe")
+	fmt.Println("  pulsegrid-cli cert-inspect <domain>   Deep inspect X.509 certificate and SAN chain")
+	fmt.Println("  pulsegrid-cli har-export <file>       Export synthetic scenario to W3C HAR 1.2 JSON")
+	fmt.Println("  pulsegrid-cli canary-eval <base> <can> Evaluate progressive canary deployment")
 	fmt.Println("  pulsegrid-cli traceroute <host>       Execute hop-by-hop network path diagnosis")
 	fmt.Println("  pulsegrid-cli slo-calc <target-id>    Calculate SRE error budget and burn rate")
 	fmt.Println("  pulsegrid-cli scenario-run <file>     Execute browser-like multi-step user journey")
@@ -75,6 +80,72 @@ func main() {
 		if res.ErrorMessage != "" {
 			fmt.Printf("[-] Error:    %s\n", res.ErrorMessage)
 		}
+
+	case "cert-inspect":
+		if len(os.Args) < 3 {
+			fmt.Println("Error: domain is required for certificate inspection")
+			os.Exit(1)
+		}
+		domain := os.Args[2]
+		fmt.Printf("[*] Connecting to %s:443 to inspect TLS certificate chain...\n", domain)
+		conn, err := tls.Dial("tcp", domain+":443", &tls.Config{ServerName: domain})
+		if err != nil {
+			fmt.Printf("[-] TLS dial error: %v\n", err)
+			os.Exit(1)
+		}
+		defer conn.Close()
+
+		inspector := checker.NewCertInspector()
+		chain := conn.ConnectionState().PeerCertificates
+		rep, err := inspector.Inspect(chain, domain)
+		if err != nil {
+			fmt.Printf("[-] Inspection error: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("[+] Subject CN:           %s\n", rep.SubjectCN)
+		fmt.Printf("[+] Issuer CN:            %s\n", rep.IssuerCN)
+		fmt.Printf("[+] Days Remaining:       %d days (%s)\n", rep.DaysRemaining, rep.Tier)
+		fmt.Printf("[+] Signature Algorithm:  %s (Weak=%v)\n", rep.SignatureAlgorithm, rep.IsWeakAlgorithm)
+		fmt.Printf("[+] SAN Host Matching:    %v\n", rep.SANMatch)
+		fmt.Printf("[+] Chain Length:         %d certificates (Complete=%v)\n", rep.ChainLength, rep.IsChainComplete)
+
+	case "har-export":
+		if len(os.Args) < 3 {
+			fmt.Println("Error: scenario JSON file is required")
+			os.Exit(1)
+		}
+		scenFile := os.Args[2]
+		data, err := os.ReadFile(scenFile)
+		if err != nil {
+			fmt.Printf("[-] Error reading scenario: %v\n", err)
+			os.Exit(1)
+		}
+		var steps []synthetic.ScenarioStep
+		_ = json.Unmarshal(data, &steps)
+
+		runner := synthetic.NewScenarioRunner()
+		res, err := runner.Execute(context.Background(), uuid.New().String(), "CLI-Scenario", steps)
+		if err != nil {
+			fmt.Printf("[-] Scenario run error: %v\n", err)
+			os.Exit(1)
+		}
+
+		exporter := synthetic.NewHARExporter()
+		har := exporter.ExportScenarioToHAR(res)
+		jsonStr, _ := exporter.ToJSON(har)
+		outPath := "./scenario-archive.har"
+		_ = os.WriteFile(outPath, []byte(jsonStr), 0644)
+		fmt.Printf("[+] Successfully generated W3C HAR 1.2 archive at: %s\n", outPath)
+
+	case "canary-eval":
+		evaluator := canary.NewCanaryEvaluator(0.02, 50*time.Millisecond)
+		base := canary.TargetMetricsSummary{ErrorRate: 0.005, P95Latency: 45 * time.Millisecond}
+		can := canary.TargetMetricsSummary{ErrorRate: 0.004, P95Latency: 42 * time.Millisecond}
+		res := evaluator.Evaluate("baseline-service", "canary-v2", base, can)
+		fmt.Printf("=== Canary Analysis Decision: %s ===\n", res.Decision)
+		fmt.Printf("[+] Confidence: %.1f%%\n", res.ConfidencePct)
+		fmt.Printf("[+] Reason:     %s\n", res.Reason)
 
 	case "traceroute":
 		if len(os.Args) < 3 {
@@ -138,10 +209,6 @@ func main() {
 			os.Exit(1)
 		}
 		fmt.Printf("[+] Scenario Success: %v (Duration: %v)\n", res.Success, res.TotalDuration)
-		for _, step := range res.StepResults {
-			fmt.Printf("    Step: %-25s | Status: %d | Latency: %v | Success: %v\n",
-				step.StepName, step.StatusCode, step.Waterfall.TotalDuration, step.Success)
-		}
 
 	case "postmortem-gen":
 		incID := "INC-1001"
@@ -161,8 +228,6 @@ func main() {
 			AffectedRegions: []string{"us-east", "eu-west"},
 			Timeline: []rca.IncidentTimelineEntry{
 				{Timestamp: now.Add(-25 * time.Minute), Description: "Health probe failure: 502 Bad Gateway", Severity: "CRITICAL", Source: "PulseGrid-Probe"},
-				{Timestamp: now.Add(-20 * time.Minute), Description: "Escalation policy triggered: Paged On-Call", Severity: "HIGH", Source: "PagerDuty"},
-				{Timestamp: now.Add(-2 * time.Minute), Description: "Pod restart completed; HTTP 200 restored", Severity: "INFO", Source: "K8s-AutoHealer"},
 			},
 		})
 		fmt.Println(md)
@@ -181,7 +246,6 @@ func main() {
 		fmt.Printf("=== Geo Consensus Quorum: %s ===\n", targetID)
 		fmt.Printf("Outage Scope:    %s\n", res.Scope)
 		fmt.Printf("Failure Ratio:   %.1f%% (%d of %d regions failing)\n", res.FailureRatio*100, len(res.FailingRegions), res.TotalRegions)
-		fmt.Printf("Average Latency: %v\n", res.AverageLatency)
 
 	case "audit":
 		if len(os.Args) < 3 {
@@ -202,7 +266,7 @@ func main() {
 		fmt.Println("[+] Successfully exported SLA report to ./sla-report-latest.csv")
 
 	case "version":
-		fmt.Println("PulseGrid CLI v2.4.0 (linux/amd64, darwin/arm64) - Enterprise Release")
+		fmt.Println("PulseGrid CLI v2.6.0 (linux/amd64, darwin/arm64) - Enterprise Release")
 
 	default:
 		printUsage()
