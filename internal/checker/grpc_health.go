@@ -70,8 +70,8 @@ func (c *GRPCHealthChecker) CheckHealth(ctx context.Context, target *models.Targ
 		Latency:      latency,
 		ErrorMessage: errMsg,
 		Breakdown: models.LatencyBreakdown{
-			Connect: latency,
-			Total:   latency,
+			TCPConnect: latency,
+			Total:      latency,
 		},
 	}, nil
 }

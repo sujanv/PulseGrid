@@ -1,7 +1,6 @@
 package test
 
 import (
-	"context"
 	"crypto/tls"
 	"net/http"
 	"net/http/httptest"
