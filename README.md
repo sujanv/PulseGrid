@@ -1,7 +1,7 @@
 # ⚡ PulseGrid
 
 > **Enterprise Distributed Synthetic & Uptime Monitoring Engine**  
-> Engineered in Go 1.22+ with Bounded-Concurrency Goroutine Pools, Google SRE Error Budget Tracking, W3C HAR 1.2 Exporter, Automated Canary Analysis, Chaos Fault Injection, and Kubernetes Native Automation.
+> Engineered in Go 1.22+ with Bounded-Concurrency Goroutine Pools, Google SRE Error Budget Tracking, W3C HAR 1.2 Exporter, Automated Canary Analysis, Chaos Fault Injection, Core Web Vitals, and Kubernetes Native Automation.
 
 [![Go Version](https://img.shields.io/badge/go-1.22+-blue.svg)](https://golang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -18,19 +18,20 @@
 - [Key Enterprise Features](#-key-enterprise-features)
   - [High-Throughput Bounded Concurrency Worker Pool](#high-throughput-bounded-concurrency-worker-pool)
   - [Multi-Protocol Probing Engines](#multi-protocol-probing-engines)
-  - [X.509 Certificate Chain & SAN Inspector](#x509-certificate-chain--san-inspector)
-  - [Mutual TLS (mTLS) Zero-Trust Authentication](#mutual-tls-mtls-zero-trust-authentication)
-  - [Browser-Like Multi-Step Synthetic Scenarios](#browser-like-multi-step-synthetic-scenarios)
+  - [Synthetic Browser Core Web Vitals (CWV) Profiler](#synthetic-browser-core-web-vitals-cwv-profiler)
+  - [RFC 1889 / 3550 Inter-Arrival Jitter Profiler](#rfc-1889--3550-inter-arrival-jitter-profiler)
+  - [GeoDNS Multi-Vantage Steering Verification](#geodns-multi-vantage-steering-verification)
+  - [Automated ACME Let's Encrypt Certificate Lifecycle](#automated-acme-lets-encrypt-certificate-lifecycle)
+  - [Prometheus Remote-Write Time Series Exporter](#prometheus-remote-write-time-series-exporter)
+  - [Calendar-Aware On-Call Schedule Rotation](#calendar-aware-on-call-schedule-rotation)
+  - [Production Grafana 1-Click Dashboard JSON](#production-grafana-1-click-dashboard-json)
+  - [OpenTelemetry Span Linking for Outage Chains](#opentelemetry-span-linking-for-outage-chains)
   - [W3C HAR 1.2 HTTP Archive Exporter](#w3c-har-12-http-archive-exporter)
   - [Automated Canary Analysis (ACA) & Progressive Rollouts](#automated-canary-analysis-aca--progressive-rollouts)
   - [Google SRE Multi-Window Multi-Burn-Rate SLO Engine](#google-sre-multi-window-multi-burn-rate-slo-engine)
   - [Dynamic Adaptive Sampling](#dynamic-adaptive-sampling)
   - [Alert De-duplication & Failure Domain Correlation](#alert-de-duplication--failure-domain-correlation)
   - [Bi-directional PagerDuty v2 Sync & Chat Webhooks](#bi-directional-pagerduty-v2-sync--chat-webhooks)
-  - [Geo-Matrix Consensus & Exponential Flap Dampening](#geo-matrix-consensus--exponential-flap-dampening)
-  - [Chaos Engineering & Synthetic Fault Injection](#chaos-engineering--synthetic-fault-injection)
-  - [Automated SRE Incident Post-Mortem & Timeline Generator](#automated-sre-incident-post-mortem--timeline-generator)
-  - [Hop-by-Hop Traceroute & Anycast Route Shifts](#hop-by-hop-traceroute--anycast-route-shifts)
   - [Kubernetes Operator & Helm Deployment](#kubernetes-operator--helm-deployment)
 - [Getting Started](#-getting-started)
 - [CLI Reference](#-cli-reference)
@@ -44,7 +45,7 @@
 
 **PulseGrid** is an enterprise synthetic and uptime monitoring service built in Go. It empowers Site Reliability Engineering (SRE) and platform teams to schedule, probe, diagnose, and auto-remediate thousands of distributed targets with strictly bounded resource usage.
 
-PulseGrid eliminates monitoring blind spots by combining multi-region quorum consensus, synthetic browser user journeys with cookie persistence, W3C HAR 1.2 exporting, deep X.509 certificate authority inspection, mTLS zero-trust probing, hop-by-hop network path diagnosis, and Google SRE multi-window burn rate alerts.
+PulseGrid eliminates monitoring blind spots by combining multi-region quorum consensus, synthetic browser user journeys with cookie persistence, Core Web Vitals profiling, RFC 1889 network jitter measurement, W3C HAR 1.2 exporting, deep X.509 certificate authority inspection, mTLS zero-trust probing, hop-by-hop network path diagnosis, and Google SRE multi-window burn rate alerts.
 
 ---
 
@@ -62,22 +63,21 @@ flowchart TD
         Q --> WP[Worker Pool]
         WP --> ChkHTTP[HTTP/HTTPS Assertion]
         WP --> ChkGRPC[gRPC Health Check Protocol]
+        WP --> ChkWS[WebSocket Stream Heartbeat]
         WP --> ChkMTLS[mTLS Zero-Trust Probing]
         WP --> ChkCert[X.509 SAN & Expiration Inspector]
-        WP --> ChkTCP[TCP / Socket Probe]
-        WP --> ChkUDP[UDP Reachability Probe]
-        WP --> ChkDNS[DNS & DNSSEC Signature]
-        WP --> ChkTLS[TLS & OCSP Stapling]
+        WP --> ChkJitter[RFC 1889 Jitter Profiler]
+        WP --> ChkGeoDNS[GeoDNS Policy Steering]
+        WP --> ChkVitals[Core Web Vitals Evaluator]
         WP --> ChkScen[Synthetic Scenario Runner]
         WP --> ChkTrace[Hop-by-Hop Traceroute]
-        WP --> Chaos[Chaos Fault Injector]
     end
 
     subgraph Consensus & Analysis
         WP --> GeoQuorum[Geo-Matrix Consensus]
         WP --> FlapDampener[Flap Dampener - Hysteresis]
         WP --> Sampler[Adaptive Sampling Engine]
-        WP --> OTel[OpenTelemetry Span Collector]
+        WP --> OTel[OpenTelemetry Span Collector & Linker]
         WP --> SLO[Google SRE Burn Rate Evaluator]
         WP --> Canary[Automated Canary Analyzer]
         WP --> RCA[RCA & Post-Mortem Generator]
@@ -86,14 +86,15 @@ flowchart TD
 
     subgraph Delivery & Action
         Bus --> SSE[SSE /api/v1/stream/results]
-        Bus --> WS[WebSocket Live Feed]
         Bus --> Rem[Self-Healing Remediation]
         Bus --> Dedup[Alert Deduplication & Correlation]
-        Dedup --> PagerDuty[PagerDuty v2 Auto-Resolve]
-        Dedup --> Teams[Microsoft Teams Adaptive Cards]
-        Dedup --> Discord[Discord Rich Embeds]
-        Dedup --> Slack[Slack / SMS / Email]
-        Bus --> HAR[HAR 1.2 Export]
+        Dedup --> OnCall[On-Call Rotation Dispatcher]
+        OnCall --> PagerDuty[PagerDuty v2 Auto-Resolve]
+        OnCall --> Teams[Microsoft Teams Adaptive Cards]
+        OnCall --> Discord[Discord Rich Embeds]
+        Bus --> RemoteWrite[Prometheus Remote-Write]
+        Bus --> Grafana[Grafana 1-Click Dashboards]
+        Bus --> Badge[Dynamic SVG / JSON Badges]
         Bus --> StatusPage[Public Status Page & RSS/Atom]
     end
 ```
@@ -109,32 +110,45 @@ flowchart TD
 ### Multi-Protocol Probing Engines
 - **HTTP / HTTPS**: Full response assertion (body regex, status codes, headers, and latency bounds).
 - **gRPC Health Checking Protocol**: Standard `grpc.health.v1.Health/Check` status verification (`SERVING`, `NOT_SERVING`, `UNKNOWN`).
-- **TCP / Port**: Connection handshake and socket ping.
-- **UDP**: Reachability probe with ICMP port-unreachable detection.
-- **DNS & DNSSEC**: Record lookup, cryptographic RRSIG signature validation, and root-trust chain checking.
-- **TLS & OCSP Stapling**: SSL expiration alerts, certificate revocation verification via OCSP stapling and CRL.
-- **HTTP Security Headers Auditor**: Automated audit and A+ to F grading for HSTS, CSP, X-Frame-Options, and Permissions-Policy.
+- **WebSocket Streaming Heartbeat**: Bi-directional streaming connection probe measuring handshake and ping/pong turnaround latency.
+- **TCP / UDP / DNS / DNSSEC / TLS**: Deep network reachability, cryptographic RRSIG signature validation, and OCSP stapling revocation.
 
-### X.509 Certificate Chain & SAN Inspector
-- Deep inspection of peer certificates:
-  - Subject Alternative Names (SAN) matching, including wildcard patterns (`*.example.com`).
-  - Warning tiers for expiration: 30 days, 14 days, 7 days, and expired.
-  - Intermediate Certificate Authority (CA) chain completeness.
-  - Flags weak cryptographic signature algorithms (SHA-1, MD5).
+### Synthetic Browser Core Web Vitals (CWV) Profiler
+- Automatically profiles front-end web targets for Google Core Web Vitals:
+  - **Largest Contentful Paint (LCP)**: `<2.5s` (Good), `2.5s-4.0s` (Needs Improvement), `>4.0s` (Poor).
+  - **First Input Delay (FID) / INP**: `<100ms` (Good), `100ms-300ms` (Needs Improvement), `>300ms` (Poor).
+  - **Cumulative Layout Shift (CLS)**: `<0.10` (Good), `0.10-0.25` (Needs Improvement), `>0.25` (Poor).
+  - **Time to First Byte (TTFB)**: `<800ms`.
 
-### Mutual TLS (mTLS) Zero-Trust Authentication
-- Support for internal zero-trust microservice probing using client certificates, private keys, and custom CA trust bundles (`internal/checker/mtls.go`).
+### RFC 1889 / 3550 Inter-Arrival Jitter Profiler
+- Measures smoothed inter-arrival packet dispersion and latency deviation:
+  $$\Delta(i, j) = (R_j - S_j) - (R_i - S_i)$$
+  $$J = J + rac{|\Delta(i, j)| - J}{16}$$
+- Reports Min, Mean, Max RTT, and RFC 1889 smoothed jitter alongside percentage packet loss.
 
-### Browser-Like Multi-Step Synthetic Scenarios
-- Multi-step transaction runner (`internal/synthetic/scenario.go`) with session cookie jar persistence across steps.
-- Automatic redirect chain tracking (up to 10 hops) and step-by-step performance waterfall metrics (DNS, Connect, TLS, TTFB, and Transfer).
-- DOM & HTML selector matcher (`internal/synthetic/dom_matcher.go`) supporting `#id`, `.class`, tags, and regex extraction.
+### GeoDNS Multi-Vantage Steering Verification
+- Simulates DNS queries from multiple regional vantage points (`us-east`, `eu-west`, `ap-south`) to verify that queries resolve to the expected regional IP prefixes, catching silent edge DNS routing misconfigurations.
+
+### Automated ACME Let's Encrypt Certificate Lifecycle
+- Tracks SSL/TLS certificates through automated ACME challenge stages (`http-01`, `dns-01`) and triggers preemptive renewal workflows 30 days before expiration.
+
+### Prometheus Remote-Write Time Series Exporter
+- Native Prometheus Remote-Write client (`internal/exporter/remote_write.go`) pushing probe metrics directly to Cortex, Thanos, M3DB, or VictoriaMetrics clusters without scraping overhead.
+
+### Calendar-Aware On-Call Schedule Rotation
+- Configurable on-call rotation manager (`internal/alert/oncall_rotation.go`) supporting daily and weekly rotation handovers, secondary escalation fallbacks, and timezone-aware shifts.
+
+### Production Grafana 1-Click Dashboard JSON
+- Generates compliant Grafana dashboard models (`internal/integrations/grafana.go`) featuring panels for SLO burn rate gauges, P95/P99 latency percentiles, and target uptime percentages.
+
+### OpenTelemetry Span Linking for Outage Chains
+- Links dependent service failure spans across microservice architectures, allowing SRE teams to trace cascading outages back to the root cause dependency.
 
 ### W3C HAR 1.2 HTTP Archive Exporter
-- Export synthetic scenario runs as standard W3C HAR 1.2 JSON files (`internal/synthetic/har_exporter.go`) ready for immediate import into Chrome DevTools, Charles Proxy, and Postman.
+- Export synthetic scenario runs as standard W3C HAR 1.2 JSON files ready for immediate import into Chrome DevTools, Charles Proxy, and Postman.
 
 ### Automated Canary Analysis (ACA) & Progressive Rollouts
-- Automated canary evaluator (`internal/canary/evaluator.go`) comparing error rate delta and P95/P99 latency regressions between baseline and canary targets, delivering clear `PROMOTE`, `HALT`, or `ROLLBACK` rollout recommendations.
+- Automated canary evaluator comparing error rate delta and P95/P99 latency regressions between baseline and canary targets, delivering clear `PROMOTE`, `HALT`, or `ROLLBACK` rollout recommendations.
 
 ### Google SRE Multi-Window Multi-Burn-Rate SLO Engine
 Implements the Google SRE Handbook Chapter 5 standard multi-window burn rate alerts:
@@ -142,28 +156,6 @@ Implements the Google SRE Handbook Chapter 5 standard multi-window burn rate ale
 - **6-Hour Window (6.0x Burn Rate)**: Consumes 5% error budget in 6 hours &rarr; High severity alert.
 - **24-Hour / 3-Day Window (3.0x / 1.0x Burn Rate)**: 10% budget consumed &rarr; Engineering ticket alert.
 - Computes remaining downtime budget in minutes and real-time **Time-to-Exhaustion** in hours.
-
-### Dynamic Adaptive Sampling
-- Automatically ramps sampling rate to 100% when targets fail or latency degrades. Downsamples steady green targets to configurable baseline (e.g. 20%) to conserve network and database storage.
-
-### Alert De-duplication & Failure Domain Correlation
-- Groups firing alerts by shared failure domains (cloud provider, availability zone, cluster, gateway) within a sliding time window, preventing alert fatigue by consolidating 50 alerts into a single incident cluster alert.
-
-### Bi-directional PagerDuty v2 Sync & Chat Webhooks
-- PagerDuty Events API v2 client with automatic incident triggers and automatic resolve events upon health check recovery.
-- Rich Microsoft Teams Adaptive Cards and Discord Embed formatters.
-
-### Geo-Matrix Consensus & Exponential Flap Dampening
-- **Geo-Matrix Evaluator**: Distinguishes between localized CDN edge degradation and global origin outages.
-- **Flap Dampener**: Exponential decay hysteresis suppresses alert flapping storms while services rapidly oscillate during recovery.
-
-### Chaos Engineering & Synthetic Fault Injection
-- Synthetic fault injection engine simulates latency spikes, packet loss, and HTTP 500/503 status overrides.
-- **Blast Radius Protection**: Strict environment checks prevent running chaos experiments against production targets; enforces max percentage limits.
-
-### Automated SRE Incident Post-Mortem & Timeline Generator
-- Auto-generates GitHub-flavored Markdown post-mortem documents aggregating root causes, affected regions, chronological timeline events, and action items.
-- Reliability metrics calculator: Calculates MTTD (Mean Time to Detect), MTTR (Mean Time to Resolve), total downtime in minutes, and error budget impact.
 
 ---
 
@@ -181,6 +173,7 @@ docker-compose up -d
 
 - **Web Dashboard**: [http://localhost:8080](http://localhost:8080)
 - **Public Status Page**: [http://localhost:8080/status](http://localhost:8080/status)
+- **Live SVG Badge**: [http://localhost:8080/badge/live/badge.svg](http://localhost:8080/badge/live/badge.svg)
 - **Prometheus Metrics**: [http://localhost:8080/metrics](http://localhost:8080/metrics)
 - **Kubernetes Health**: [http://localhost:8080/healthz](http://localhost:8080/healthz)
 
@@ -193,6 +186,15 @@ PulseGrid includes a command-line interface for probes, synthetic journeys, netw
 ```bash
 # Execute immediate single probe
 ./bin/pulsegrid-cli check https://example.com --timeout=5
+
+# Measure RFC 1889 network jitter and latency dispersion
+./bin/pulsegrid-cli jitter-probe api.pulsegrid.io
+
+# Profile Google Core Web Vitals (LCP, FID, CLS)
+./bin/pulsegrid-cli webvitals https://pulsegrid.io
+
+# Export Grafana production dashboard JSON
+./bin/pulsegrid-cli grafana-export
 
 # Deep inspect SSL/TLS certificate and SAN chain
 ./bin/pulsegrid-cli cert-inspect api.pulsegrid.io
@@ -232,6 +234,9 @@ PulseGrid includes a command-line interface for probes, synthetic journeys, netw
 | `POST` | `/api/v1/targets` | Register a new target |
 | `GET` | `/api/v1/targets/:id/results` | Historical check results |
 | `GET` | `/api/v1/targets/:id/stats` | P50, P95, P99 Latency & Uptime % |
+| `POST` | `/api/v1/synthetic/web-vitals` | Profile Core Web Vitals (LCP, FID, CLS) |
+| `GET` | `/api/v1/integrations/grafana/dashboard` | 1-Click Grafana production dashboard |
+| `GET` | `/badge/live/:id.svg` | Dynamic SVG Uptime and Latency Badge |
 | `POST` | `/api/v1/targets/har/export` | Export synthetic scenario to W3C HAR 1.2 |
 | `POST` | `/api/v1/canary/evaluate` | Automated Canary Analysis (ACA) decision |
 | `GET` | `/api/v1/network/traceroute?host=...` | Hop-by-hop network path diagnosis |
@@ -241,10 +246,8 @@ PulseGrid includes a command-line interface for probes, synthetic journeys, netw
 | `POST` | `/api/v1/integrations/alertmanager` | Ingest Prometheus Alertmanager webhook |
 | `GET` | `/api/v1/stream/results` | Server-Sent Events (SSE) live results |
 | `POST` | `/api/v1/remediation/:id` | Configure automated remediation action |
-| `GET` | `/api/v1/statuspage/components` | Component status summary |
 | `GET` | `/status/feed.rss` | RSS 2.0 incident feed |
 | `GET` | `/status/feed.atom` | Atom XML incident feed |
-| `GET` | `/badge/:target_id.svg` | Dynamic SVG Uptime Badge |
 | `GET` | `/healthz` | Kubernetes liveness probe |
 | `GET` | `/metrics` | Prometheus metrics scrape endpoint |
 
