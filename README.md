@@ -1,7 +1,7 @@
 # ⚡ PulseGrid
 
 > **Enterprise Distributed Synthetic & Uptime Monitoring Engine**  
-> Engineered in Go 1.22+ with Bounded-Concurrency Goroutine Pools, Google SRE Error Budget Tracking, Chaos Fault Injection, and Kubernetes Native Automation.
+> Engineered in Go 1.22+ with Bounded-Concurrency Goroutine Pools, Google SRE Error Budget Tracking, W3C HAR 1.2 Exporter, Automated Canary Analysis, Chaos Fault Injection, and Kubernetes Native Automation.
 
 [![Go Version](https://img.shields.io/badge/go-1.22+-blue.svg)](https://golang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -18,17 +18,19 @@
 - [Key Enterprise Features](#-key-enterprise-features)
   - [High-Throughput Bounded Concurrency Worker Pool](#high-throughput-bounded-concurrency-worker-pool)
   - [Multi-Protocol Probing Engines](#multi-protocol-probing-engines)
+  - [X.509 Certificate Chain & SAN Inspector](#x509-certificate-chain--san-inspector)
+  - [Mutual TLS (mTLS) Zero-Trust Authentication](#mutual-tls-mtls-zero-trust-authentication)
   - [Browser-Like Multi-Step Synthetic Scenarios](#browser-like-multi-step-synthetic-scenarios)
+  - [W3C HAR 1.2 HTTP Archive Exporter](#w3c-har-12-http-archive-exporter)
+  - [Automated Canary Analysis (ACA) & Progressive Rollouts](#automated-canary-analysis-aca--progressive-rollouts)
   - [Google SRE Multi-Window Multi-Burn-Rate SLO Engine](#google-sre-multi-window-multi-burn-rate-slo-engine)
+  - [Dynamic Adaptive Sampling](#dynamic-adaptive-sampling)
+  - [Alert De-duplication & Failure Domain Correlation](#alert-de-duplication--failure-domain-correlation)
+  - [Bi-directional PagerDuty v2 Sync & Chat Webhooks](#bi-directional-pagerduty-v2-sync--chat-webhooks)
   - [Geo-Matrix Consensus & Exponential Flap Dampening](#geo-matrix-consensus--exponential-flap-dampening)
   - [Chaos Engineering & Synthetic Fault Injection](#chaos-engineering--synthetic-fault-injection)
   - [Automated SRE Incident Post-Mortem & Timeline Generator](#automated-sre-incident-post-mortem--timeline-generator)
-  - [Cryptographic Webhook HMAC-SHA256 Signing](#cryptographic-webhook-hmac-sha256-signing)
-  - [Prometheus Alertmanager Infrastructure Correlation](#prometheus-alertmanager-infrastructure-correlation)
-  - [Hop-by-Hop Traceroute & Route Flap Analyzer](#hop-by-hop-traceroute--route-flap-analyzer)
-  - [Real-Time SSE & WebSocket Streaming](#real-time-sse--websocket-streaming)
-  - [Self-Healing Webhook Remediation Circuit](#self-healing-webhook-remediation-circuit)
-  - [Multi-Tenant RBAC & JWT Authorization](#multi-tenant-rbac--jwt-authorization)
+  - [Hop-by-Hop Traceroute & Anycast Route Shifts](#hop-by-hop-traceroute--anycast-route-shifts)
   - [Kubernetes Operator & Helm Deployment](#kubernetes-operator--helm-deployment)
 - [Getting Started](#-getting-started)
 - [CLI Reference](#-cli-reference)
@@ -40,9 +42,9 @@
 
 ## 🔭 Overview
 
-**PulseGrid** is an enterprise-grade synthetic and uptime monitoring service built in Go. It empowers reliability engineering (SRE) and platform teams to schedule, probe, diagnose, and auto-remediate thousands of distributed targets with strictly bounded resource usage.
+**PulseGrid** is an enterprise synthetic and uptime monitoring service built in Go. It empowers Site Reliability Engineering (SRE) and platform teams to schedule, probe, diagnose, and auto-remediate thousands of distributed targets with strictly bounded resource usage.
 
-PulseGrid eliminates monitoring blind spots by combining multi-region quorum consensus, synthetic browser user journeys with cookie persistence, hop-by-hop network path diagnosis, SSL/TLS certificate revocation tracking (OCSP stapling), HTTP security header grading (A+ to F), and Google SRE multi-window burn rate alerts.
+PulseGrid eliminates monitoring blind spots by combining multi-region quorum consensus, synthetic browser user journeys with cookie persistence, W3C HAR 1.2 exporting, deep X.509 certificate authority inspection, mTLS zero-trust probing, hop-by-hop network path diagnosis, and Google SRE multi-window burn rate alerts.
 
 ---
 
@@ -59,6 +61,9 @@ flowchart TD
     subgraph Probing Engine [Bounded Concurrency Worker Pool]
         Q --> WP[Worker Pool]
         WP --> ChkHTTP[HTTP/HTTPS Assertion]
+        WP --> ChkGRPC[gRPC Health Check Protocol]
+        WP --> ChkMTLS[mTLS Zero-Trust Probing]
+        WP --> ChkCert[X.509 SAN & Expiration Inspector]
         WP --> ChkTCP[TCP / Socket Probe]
         WP --> ChkUDP[UDP Reachability Probe]
         WP --> ChkDNS[DNS & DNSSEC Signature]
@@ -71,8 +76,10 @@ flowchart TD
     subgraph Consensus & Analysis
         WP --> GeoQuorum[Geo-Matrix Consensus]
         WP --> FlapDampener[Flap Dampener - Hysteresis]
+        WP --> Sampler[Adaptive Sampling Engine]
         WP --> OTel[OpenTelemetry Span Collector]
         WP --> SLO[Google SRE Burn Rate Evaluator]
+        WP --> Canary[Automated Canary Analyzer]
         WP --> RCA[RCA & Post-Mortem Generator]
         WP --> Bus[Pub/Sub Event Bus]
     end
@@ -81,8 +88,12 @@ flowchart TD
         Bus --> SSE[SSE /api/v1/stream/results]
         Bus --> WS[WebSocket Live Feed]
         Bus --> Rem[Self-Healing Remediation]
-        Bus --> Signer[HMAC-SHA256 Webhook Signer]
-        Signer --> Alert[Slack / PagerDuty / OpsGenie / SMS]
+        Bus --> Dedup[Alert Deduplication & Correlation]
+        Dedup --> PagerDuty[PagerDuty v2 Auto-Resolve]
+        Dedup --> Teams[Microsoft Teams Adaptive Cards]
+        Dedup --> Discord[Discord Rich Embeds]
+        Dedup --> Slack[Slack / SMS / Email]
+        Bus --> HAR[HAR 1.2 Export]
         Bus --> StatusPage[Public Status Page & RSS/Atom]
     end
 ```
@@ -97,16 +108,33 @@ flowchart TD
 
 ### Multi-Protocol Probing Engines
 - **HTTP / HTTPS**: Full response assertion (body regex, status codes, headers, and latency bounds).
+- **gRPC Health Checking Protocol**: Standard `grpc.health.v1.Health/Check` status verification (`SERVING`, `NOT_SERVING`, `UNKNOWN`).
 - **TCP / Port**: Connection handshake and socket ping.
 - **UDP**: Reachability probe with ICMP port-unreachable detection.
 - **DNS & DNSSEC**: Record lookup, cryptographic RRSIG signature validation, and root-trust chain checking.
 - **TLS & OCSP Stapling**: SSL expiration alerts, certificate revocation verification via OCSP stapling and CRL.
 - **HTTP Security Headers Auditor**: Automated audit and A+ to F grading for HSTS, CSP, X-Frame-Options, and Permissions-Policy.
 
+### X.509 Certificate Chain & SAN Inspector
+- Deep inspection of peer certificates:
+  - Subject Alternative Names (SAN) matching, including wildcard patterns (`*.example.com`).
+  - Warning tiers for expiration: 30 days, 14 days, 7 days, and expired.
+  - Intermediate Certificate Authority (CA) chain completeness.
+  - Flags weak cryptographic signature algorithms (SHA-1, MD5).
+
+### Mutual TLS (mTLS) Zero-Trust Authentication
+- Support for internal zero-trust microservice probing using client certificates, private keys, and custom CA trust bundles (`internal/checker/mtls.go`).
+
 ### Browser-Like Multi-Step Synthetic Scenarios
 - Multi-step transaction runner (`internal/synthetic/scenario.go`) with session cookie jar persistence across steps.
 - Automatic redirect chain tracking (up to 10 hops) and step-by-step performance waterfall metrics (DNS, Connect, TLS, TTFB, and Transfer).
 - DOM & HTML selector matcher (`internal/synthetic/dom_matcher.go`) supporting `#id`, `.class`, tags, and regex extraction.
+
+### W3C HAR 1.2 HTTP Archive Exporter
+- Export synthetic scenario runs as standard W3C HAR 1.2 JSON files (`internal/synthetic/har_exporter.go`) ready for immediate import into Chrome DevTools, Charles Proxy, and Postman.
+
+### Automated Canary Analysis (ACA) & Progressive Rollouts
+- Automated canary evaluator (`internal/canary/evaluator.go`) comparing error rate delta and P95/P99 latency regressions between baseline and canary targets, delivering clear `PROMOTE`, `HALT`, or `ROLLBACK` rollout recommendations.
 
 ### Google SRE Multi-Window Multi-Burn-Rate SLO Engine
 Implements the Google SRE Handbook Chapter 5 standard multi-window burn rate alerts:
@@ -115,43 +143,27 @@ Implements the Google SRE Handbook Chapter 5 standard multi-window burn rate ale
 - **24-Hour / 3-Day Window (3.0x / 1.0x Burn Rate)**: 10% budget consumed &rarr; Engineering ticket alert.
 - Computes remaining downtime budget in minutes and real-time **Time-to-Exhaustion** in hours.
 
+### Dynamic Adaptive Sampling
+- Automatically ramps sampling rate to 100% when targets fail or latency degrades. Downsamples steady green targets to configurable baseline (e.g. 20%) to conserve network and database storage.
+
+### Alert De-duplication & Failure Domain Correlation
+- Groups firing alerts by shared failure domains (cloud provider, availability zone, cluster, gateway) within a sliding time window, preventing alert fatigue by consolidating 50 alerts into a single incident cluster alert.
+
+### Bi-directional PagerDuty v2 Sync & Chat Webhooks
+- PagerDuty Events API v2 client with automatic incident triggers and automatic resolve events upon health check recovery.
+- Rich Microsoft Teams Adaptive Cards and Discord Embed formatters.
+
 ### Geo-Matrix Consensus & Exponential Flap Dampening
-- **Geo-Matrix Evaluator** (`internal/consensus/geo_matrix.go`): Distinguishes between localized CDN edge degradation and global origin outages.
-- **Flap Dampener** (`internal/consensus/flap_dampener.go`): Exponential decay hysteresis suppresses alert flapping storms while services rapidly oscillate during recovery.
+- **Geo-Matrix Evaluator**: Distinguishes between localized CDN edge degradation and global origin outages.
+- **Flap Dampener**: Exponential decay hysteresis suppresses alert flapping storms while services rapidly oscillate during recovery.
 
 ### Chaos Engineering & Synthetic Fault Injection
-- Synthetic fault injection engine (`internal/chaos/fault_injector.go`) simulates latency spikes, packet loss, and HTTP 500/503 status overrides.
+- Synthetic fault injection engine simulates latency spikes, packet loss, and HTTP 500/503 status overrides.
 - **Blast Radius Protection**: Strict environment checks prevent running chaos experiments against production targets; enforces max percentage limits.
 
 ### Automated SRE Incident Post-Mortem & Timeline Generator
-- Auto-generates GitHub-flavored Markdown post-mortem documents (`internal/rca/postmortem.go`) aggregating root causes, affected regions, chronological timeline events, and action items.
-- Reliability metrics calculator (`internal/rca/metrics.go`): Calculates MTTD (Mean Time to Detect), MTTR (Mean Time to Resolve), total downtime in minutes, and error budget impact.
-
-### Cryptographic Webhook HMAC-SHA256 Signing
-- Signs outbound alert webhooks (`internal/alert/webhook_signer.go`) using `HMAC-SHA256(secret, payload)`.
-- Generates `X-PulseGrid-Signature: sha256=<hex>` and `X-PulseGrid-Timestamp: <unix>` headers with anti-replay tolerance checking.
-
-### Prometheus Alertmanager Infrastructure Correlation
-- Built-in webhook receiver (`internal/integrations/alertmanager.go`) accepts alerts from Prometheus Alertmanager clusters to correlate CPU/memory infrastructure spikes with external probe outages.
-
-### Hop-by-Hop Traceroute & Route Flap Analyzer
-- Visualizes ICMP/TCP hops to the destination, highlighting transit packet loss and intermediate ISP latency spikes.
-- Detects route flapping between consecutive traces to isolate upstream BGP and transit path instability.
-
-### Real-Time SSE & WebSocket Streaming
-- Stream live check execution results via Server-Sent Events (`/api/v1/stream/results`) and full-duplex WebSockets for real-time operations dashboards.
-
-### Self-Healing Webhook Remediation Circuit
-- Automated webhook and cloud run action trigger on confirmed incident transitions.
-- Protected by cooldown circuit breakers and execution rate limiters to prevent runaway reboot loops.
-
-### Multi-Tenant RBAC & JWT Authorization
-- Fine-grained role hierarchy: `Viewer`, `Operator`, `Admin`, and `Owner`.
-- JWT token service with cryptographic HMAC-SHA256 signing and tenant isolation context.
-
-### Kubernetes Operator & Helm Deployment
-- Custom Resource Definition (`ProbeTarget`) for declarative GitOps monitoring.
-- Ingress auto-discovery watcher: annotate Ingress objects with `pulsegrid.io/monitor: "true"` for zero-touch configuration.
+- Auto-generates GitHub-flavored Markdown post-mortem documents aggregating root causes, affected regions, chronological timeline events, and action items.
+- Reliability metrics calculator: Calculates MTTD (Mean Time to Detect), MTTR (Mean Time to Resolve), total downtime in minutes, and error budget impact.
 
 ---
 
@@ -182,8 +194,14 @@ PulseGrid includes a command-line interface for probes, synthetic journeys, netw
 # Execute immediate single probe
 ./bin/pulsegrid-cli check https://example.com --timeout=5
 
-# Execute browser-like multi-step user journey
-./bin/pulsegrid-cli scenario-run ./examples/user-journey.json
+# Deep inspect SSL/TLS certificate and SAN chain
+./bin/pulsegrid-cli cert-inspect api.pulsegrid.io
+
+# Export synthetic scenario to W3C HAR 1.2 JSON
+./bin/pulsegrid-cli har-export ./examples/user-journey.json
+
+# Evaluate progressive canary rollout vs baseline
+./bin/pulsegrid-cli canary-eval baseline-api canary-api
 
 # Execute hop-by-hop traceroute network diagnostic
 ./bin/pulsegrid-cli traceroute example.com
@@ -214,7 +232,8 @@ PulseGrid includes a command-line interface for probes, synthetic journeys, netw
 | `POST` | `/api/v1/targets` | Register a new target |
 | `GET` | `/api/v1/targets/:id/results` | Historical check results |
 | `GET` | `/api/v1/targets/:id/stats` | P50, P95, P99 Latency & Uptime % |
-| `GET` | `/api/v1/targets/:id/traces` | OpenTelemetry waterfall execution spans |
+| `POST` | `/api/v1/targets/har/export` | Export synthetic scenario to W3C HAR 1.2 |
+| `POST` | `/api/v1/canary/evaluate` | Automated Canary Analysis (ACA) decision |
 | `GET` | `/api/v1/network/traceroute?host=...` | Hop-by-hop network path diagnosis |
 | `GET` | `/api/v1/slo/burn-rate?target_id=...` | Multi-window burn-rate error budget |
 | `POST` | `/api/v1/scenarios/run` | Execute browser-like multi-step scenario |
