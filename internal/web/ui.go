@@ -98,23 +98,26 @@ const DashboardHTML = `<!DOCTYPE html>
           return;
         }
 
-        container.innerHTML = targets.map(t => `
-          <div class="target-card" id="card-${t.id}">
-            <div class="target-header">
-              <span class="target-title">${t.name}</span>
-              <span class="badge badge-up">UP</span>
-            </div>
-            <div class="target-url">${t.url || (t.host + ':' + t.port)} (${t.type})</div>
-            <div class="heartbeat-bar">
-              ${Array(30).fill('<div class="bar-seg"></div>').join('')}
-            </div>
-            <div class="footer-meta">
-              <span>Interval: ${t.interval_seconds || 30}s</span>
-              <span>Timeout: ${t.timeout_seconds || 10}s</span>
-              <span>Live Mode: SSE Enabled</span>
-            </div>
-          </div>
-        `).join('');
+        container.innerHTML = targets.map(function(t) {
+          var targetUrl = t.url ? t.url : (t.host + ':' + t.port);
+          var interval = t.interval_seconds ? t.interval_seconds : 30;
+          var timeout = t.timeout_seconds ? t.timeout_seconds : 10;
+          return '<div class="target-card" id="card-' + t.id + '">' +
+            '<div class="target-header">' +
+              '<span class="target-title">' + t.name + '</span>' +
+              '<span class="badge badge-up">UP</span>' +
+            '</div>' +
+            '<div class="target-url">' + targetUrl + ' (' + t.type + ')</div>' +
+            '<div class="heartbeat-bar">' +
+              Array(30).fill('<div class="bar-seg"></div>').join('') +
+            '</div>' +
+            '<div class="footer-meta">' +
+              '<span>Interval: ' + interval + 's</span>' +
+              '<span>Timeout: ' + timeout + 's</span>' +
+              '<span>Live Mode: SSE Enabled</span>' +
+            '</div>' +
+          '</div>';
+        }).join('');
       } catch (err) {
         console.error(err);
       }

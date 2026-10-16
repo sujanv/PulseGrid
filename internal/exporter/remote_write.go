@@ -3,7 +3,6 @@ package exporter
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/sujanv/PulseGrid/internal/models"
 )
@@ -55,7 +54,7 @@ func (c *RemoteWriteClient) BuildTimeSeries(result *models.CheckResult) []Remote
 func (c *RemoteWriteClient) FormatDebugPayload(series []RemoteWriteTimeSeries) string {
 	var sb strings.Builder
 	for _, s := range series {
-		sb.WriteString(fmt.Sprintf("%s{target_id="%s"} %f @ %d\n", s.Labels["__name__"], s.Labels["target_id"], s.Value, s.Timestamp))
+		sb.WriteString(fmt.Sprintf("%s{target_id=\"%s\"} %f @ %d\n", s.Labels["__name__"], s.Labels["target_id"], s.Value, s.Timestamp))
 	}
 	return sb.String()
 }

@@ -42,14 +42,10 @@ func (f *TelemetryForwarder) FormatOpenMetrics(result *models.CheckResult) strin
 	latencySec := result.Latency.Seconds()
 
 	return fmt.Sprintf(
-		"# TYPE pulsegrid_probe_success gauge
-"+
-			"pulsegrid_probe_success{target_id="%s"} %.1f
-"+
-			"# TYPE pulsegrid_probe_duration_seconds gauge
-"+
-			"pulsegrid_probe_duration_seconds{target_id="%s"} %.6f
-",
+		"# TYPE pulsegrid_probe_success gauge\n"+
+			"pulsegrid_probe_success{target_id=\"%s\"} %.1f\n"+
+			"# TYPE pulsegrid_probe_duration_seconds gauge\n"+
+			"pulsegrid_probe_duration_seconds{target_id=\"%s\"} %.6f\n",
 		result.TargetID, val,
 		result.TargetID, latencySec,
 	)
